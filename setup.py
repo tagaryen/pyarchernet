@@ -87,7 +87,7 @@ setup(
     packages=find_packages(exclude=["tests", "*.tests", "*.tests.*", "tests.*"]),
     install_requires=REQUIRED,
     package_data={
-        'pyarchernet': ['lib/libarchernet.dll', 'lib/libarchernext.so']
+        'pyarchernet': ['lib/libarchernet.dll', 'lib/libarchernet.so']
     },
     extras_require=EXTRAS,
     include_package_data=True,
