@@ -91,11 +91,13 @@ setup(
     },
     extras_require=EXTRAS,
     include_package_data=True,
-    license='Apache License Version 2.0',
+    license='Apache License, Version 2.0 (Apache-2.0)',
     classifiers=[
         # Trove classifiers
         # Full list: https://pypi.python.org/pypi?%3Aaction=list_classifiers
-        'License :: OSI Approved :: Apache License Version 2.0',
+        'Development Status :: 4 - Beta',
+        'License :: OSI Approved :: MIT License',
+        'Topic :: Software Development :: Build Tools',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.6',
