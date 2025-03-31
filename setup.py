@@ -7,17 +7,17 @@
 import os
 import sys
 from shutil import rmtree
-
 from setuptools import find_packages, setup, Command
+from .pyarchernet import *
 
 # Package meta-data.
 NAME = 'pyarchernet'
 DESCRIPTION = 'network framework based on c library'
 URL = 'https://github.com/tagaryen/pyarchernet'
-EMAIL = 'tagaryen199@126.com'
+EMAIL = '2564928358@qq.com'
 AUTHOR = 'Archer'
 REQUIRES_PYTHON = '>=3.6.0'
-VERSION = '1.1.0'
+VERSION = '1.1.1'
 
 # What packages are required for this module to be executed?
 REQUIRED = []
@@ -87,6 +87,9 @@ setup(
     url=URL,
     packages=find_packages(exclude=["tests", "*.tests", "*.tests.*", "tests.*"]),
     install_requires=REQUIRED,
+    package_data={
+        'pyarchernet': ['lib/libarchernet.dll', 'lib/libarchernext.so']
+    },
     extras_require=EXTRAS,
     include_package_data=True,
     license='Apache License Version 2.0',
