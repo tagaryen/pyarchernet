@@ -8,7 +8,6 @@ import os
 import sys
 from shutil import rmtree
 from setuptools import find_packages, setup, Command
-from .pyarchernet import *
 
 # Package meta-data.
 NAME = 'pyarchernet'
