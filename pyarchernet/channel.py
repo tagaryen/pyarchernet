@@ -1,47 +1,37 @@
 from . import ARCHERLIB
 from .sslcontext import SSLContext
-from abc import abstractmethod
+from .handlerlist import HandlerList
 
-import ctypes
-import json
-
-
-
-def client_on_connect(host: bytes, port: int):
-    channel = Channel.get_channel(str(host, 'utf-8'), port)
-    channel.handler.on_connect(channel)
-
-def client_on_read(host: bytes, port: int, data: bytes, len: int):
-    channel = Channel.get_channel(str(host, 'utf-8'), port)
-    channel.handler.on_read(channel, data)
-
-def client_on_error(host: bytes, port: int, error: bytes):
-    channel = Channel.get_channel(str(host, 'utf-8'), port)
-    channel.handler.on_error(channel, str(error, 'utf-8'))
-
-def client_on_close(host: bytes, port: int):
-    channel = Channel.get_channel(str(host, 'utf-8'), port)
-    channel.handler.on_close(channel)
-
+import ctypes, json, threading, traceback
 
 class Channel():
-    __CHANNEL_MAP = {}
-
     __host: str
     __port: int
     __client_mode: bool
     __fd: int
 
     __sslctx: SSLContext
-    __handler: None
+    __handler_list: HandlerList
 
-    def __init__(self, host="127.0.0.1", port=9617, client_mode=True):
+    __active: bool
+
+    def __init__(self, host="127.0.0.1", port=9617, client_mode=True, sslctx: SSLContext = None, handlerlist:HandlerList = None):
+        self.__check(host, port)
         self.__host = host
         self.__port = port
         self.__fd = 0
         self.__client_mode = client_mode
-        self.__sslctx = None
+        if sslctx is not None and not sslctx.is_client_mode:
+            raise Exception("can not use a server-side SSLContext at client side")
+        self.__sslctx = sslctx
+        self.__handler_list = handlerlist
+        self.__active = False
 
+    def __check(self, host, port):
+        if host is None or port is None or type(host) is not str or type(port) is not int:
+            raise Exception(f"invalid host or port {host}, {port}")
+        if port <= 0 or port >= 65536:
+            raise Exception(f"invalid port {port}")
     
     @property
     def host(self)->str:
@@ -65,36 +55,38 @@ class Channel():
     def sslctx(self, sslctx: SSLContext):
         '''ssl证书上下文
         '''
+        if sslctx is not None and not sslctx.is_client_mode:
+            raise Exception("can not use a server-side SSLContext at client side")
         self.__sslctx = sslctx
     
+    @property
+    def active(self) -> bool:
+        return self.__active
+
     @property
     def client_mode(self)->bool:
         return self.__client_mode
 
     @property
-    def handler(self):
-        return self.__handler
+    def handlerlist(self)->HandlerList:
+        return self.__handler_list
 
-    @handler.setter
-    def handler(self, handler = None):
-        self.__handler = handler
+    def set_handlerlist(self, handlerlist:HandlerList):
+        self.__handler_list = handlerlist
 
     def setfd(self, fd: int):
+        '''do not call this function
+           this is for server side new channel
+        '''
         if self.__fd != 0 or fd == 0:
             raise Exception("can not set fd")
         self.__fd = fd
 
     def connect(self):
-        '''int64_t fd, const char *host, int port, 
-           int verify_peer, const char *ca, const char *crt, const char *key, const char *en_crt, const char *en_key, 
-           const char *match_name, const char *named_curves,
-           PyOnconnectCb on_connect, PyOnreadCb on_read, PyOnerrorCb on_error, PyOncloseCb on_close
+        '''connect to remote server
         '''        
         if not self.__client_mode:
             raise Exception("server side channel can not connect to remote")
-        
-        key = self.host + str(self.port)
-        Channel.__CHANNEL_MAP[key] = self
 
         ARCHERLIB.ARCHER_channel_new_fd.restype = ctypes.c_int64
         self.__fd = ARCHERLIB.ARCHER_channel_new_fd()
@@ -112,33 +104,106 @@ class Channel():
         c_named_curves = ctypes.c_char_p(None)
         if self.sslctx is not None:
             c_verify_peer = ctypes.c_int(1 if self.sslctx.verify_peer else 0)
-            c_ca = ctypes.c_char_p(self.sslctx.ca.encode('utf-8'))
-            c_crt = ctypes.c_char_p(self.sslctx.crt.encode('utf-8'))
-            c_key = ctypes.c_char_p(self.sslctx.key.encode('utf-8'))
-            c_en_crt = ctypes.c_char_p(self.sslctx.en_crt.encode('utf-8'))
-            c_en_key = ctypes.c_char_p(self.sslctx.en_key.encode('utf-8'))
-            c_matched_host = ctypes.c_char_p(self.sslctx.matched_hostname.encode('utf-8'))
-            c_named_curves = ctypes.c_char_p(self.sslctx.named_curves.encode('utf-8'))
+            if self.sslctx.ca is not None:
+                c_ca = ctypes.c_char_p(self.sslctx.ca.encode('utf-8'))
+            if self.sslctx.crt is not None and self.sslctx.key is not None:
+                c_crt = ctypes.c_char_p(self.sslctx.crt.encode('utf-8'))
+                c_key = ctypes.c_char_p(self.sslctx.key.encode('utf-8'))
+            if self.sslctx.en_crt is not None and self.sslctx.en_key is not None:
+                c_en_crt = ctypes.c_char_p(self.sslctx.en_crt.encode('utf-8'))
+                c_en_key = ctypes.c_char_p(self.sslctx.en_key.encode('utf-8'))
+            if self.sslctx.matched_hostname is not None:
+                c_matched_host = ctypes.c_char_p(self.sslctx.matched_hostname.encode('utf-8'))
+            if self.sslctx.named_curves is not None:
+                c_named_curves = ctypes.c_char_p(self.sslctx.named_curves.encode('utf-8'))
         # 调用C函数
         
-        OnConnectCb = ctypes.CFUNCTYPE(None, ctypes.c_char_p, ctypes.c_int)
+        def client_on_error(error: bytes):
+            if self.handlerlist is not None:
+                try:
+                    ctx = self.handlerlist.find_channel_contxet(self)
+                    if ctx is not None:
+                        ctx.handler.on_error(ctx, Exception(str(error, 'utf-8')))
+                    else:
+                        print(str(error, 'utf-8'))
+                except Exception as e:
+                    print(str(e))
+                    stack_trace = traceback.format_exc()
+                    print(stack_trace)
+
+
+        def client_on_connect():
+            self.on_connect()
+            if self.handlerlist is not None:
+                try:
+                    ctx = self.handlerlist.find_channel_contxet(self)
+                    if ctx is not None:
+                        ctx.handler.on_connect(ctx)
+                except Exception as e:
+                    if ctx is not None:
+                        ctx.handler.on_error(ctx, e)
+                    else:
+                        print(str(e))
+                        stack_trace = traceback.format_exc()
+                        print(stack_trace)
+
+        def client_on_read(data_ptr: ctypes.c_void_p, data_size: int):
+            if self.handlerlist is not None:
+                try:
+                    ctx = self.handlerlist.find_channel_contxet(self)
+                    data = bytes((ctypes.c_char * data_size).from_address(data_ptr))
+                    if ctx is not None:
+                        ctx.handler.on_read(ctx, data)
+                except Exception as e:
+                    if ctx is not None:
+                        ctx.handler.on_error(ctx, e)
+                    else:
+                        print(str(e))
+                        stack_trace = traceback.format_exc()
+                        print(stack_trace)
+
+        def client_on_close():
+            self.on_close()
+            if self.handlerlist is not None:
+                try:
+                    ctx = self.handlerlist.find_channel_contxet(self)
+                    if ctx is not None:
+                        ctx.handler.on_close(ctx)
+                except Exception as e:
+                    if ctx is not None:
+                        ctx.handler.on_error(ctx, e)
+                    else:
+                        print(str(e))
+                        stack_trace = traceback.format_exc()
+                        print(stack_trace)
+
+
+        OnConnectCb = ctypes.CFUNCTYPE(None)
         on_connect = OnConnectCb(client_on_connect)
         
-        OnReadCb = ctypes.CFUNCTYPE(None, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_int32)
+        OnReadCb = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_int32)
         on_read = OnReadCb(client_on_read)
         
-        OnErrorCb = ctypes.CFUNCTYPE(None, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p)
+        OnErrorCb = ctypes.CFUNCTYPE(None, ctypes.c_char_p)
         on_error = OnErrorCb(client_on_error)
         
-        OnCloseCb = ctypes.CFUNCTYPE(None, ctypes.c_char_p, ctypes.c_int, )
+        OnCloseCb = ctypes.CFUNCTYPE(None)
         on_close = OnCloseCb(client_on_close)
 
-        ARCHERLIB.ARCHER_channel_connect.restype = ctypes.c_char_p
-        ret = ARCHERLIB.ARCHER_channel_connect(c_fd, c_host, c_port, c_verify_peer, c_ca, c_crt, c_key, c_en_crt, c_en_key, c_matched_host, c_named_curves,
-                                         on_connect, on_read, on_error, on_close)
-        if ret is not None and ret == "":
-            raise Exception(ret)
+        def async_connect():
+            ARCHERLIB.ARCHER_channel_connect.restype = ctypes.c_char_p
+            ret = ARCHERLIB.ARCHER_channel_connect(c_fd, c_host, c_port, c_verify_peer, c_ca, c_crt, c_key, c_en_crt, c_en_key, c_matched_host, c_named_curves,
+                                            on_connect, on_read, on_error, on_close)
+            if ret is not None and ret == "":
+                raise Exception(ret)
+        self.__thread = threading.Thread(target=async_connect)
+        self.__thread.start()
     
+    def on_connect(self):
+        self.__active = True
+
+    def on_close(self):
+        self.__active = False
 
     def send(self, data: bytes | str):
         data_bytes = None
@@ -151,7 +216,7 @@ class Channel():
         else :
             raise Exception(f"can not send type {type(data)}")
         c_fd = ctypes.c_int64(self.__fd)
-        c_data = ctypes.c_char_p(data_bytes)
+        c_data = ctypes.create_string_buffer(data_bytes)
         c_size = ctypes.c_int32(len(data_bytes))
         ARCHERLIB.ARCHER_channel_write.restype = ctypes.c_void_p
         ARCHERLIB.ARCHER_channel_write(c_fd, c_data, c_size)
@@ -162,36 +227,3 @@ class Channel():
             return 
         c_fd = ctypes.c_int64(self.__fd)
         ARCHERLIB.ARCHER_channel_close(c_fd)
-
-    @staticmethod
-    def get_channel(host: str, port: int):
-        key = host + str(port)
-        if key not in Channel.__CHANNEL_MAP:
-            raise Exception("can not found channel " + key)
-        return Channel.__CHANNEL_MAP[key]
-
-class Handler():
-
-    @abstractmethod
-    def on_connect(self, channel: Channel):
-        ''' 当连接进入时
-        '''
-        pass
-
-    @abstractmethod
-    def on_read(self, channel: Channel, data: bytes):
-        ''' 当有数据被读取时
-        '''
-        pass
-
-    @abstractmethod
-    def on_error(self, channel: Channel, error: str):
-        ''' 当有错误发生时
-        '''
-        pass
-
-    @abstractmethod
-    def on_close(self, channel: Channel):
-        ''' 当连接关闭时
-        '''
-        pass
