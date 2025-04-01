@@ -23,14 +23,12 @@ class ServerMsgLis(ARPCServerMessageListenner):
     def __init__(self):
         super().__init__(MessageA, MessageB)
 
-    def do_send(self):
+    def handle_receive_and_gen_send(self, val: MessageB):
+        print(f"server recv b = {val.b}",flush=True)
         rec = MessageA()
         rec.a = "naosiaoc@assa.com"
         print("server send a = naosiaoc@assa.com", flush=True)
         return rec
-
-    def on_message(self, val: MessageB):
-        print(f"server recv b = {val.b}",flush=True)
 
 with open('tests/gm_cert/ca.crt', 'r', encoding='utf-8') as file:
     ca = file.read()
@@ -66,26 +64,33 @@ with open('tests/gm_cert/server_en.crt', 'r', encoding='utf-8') as file:
 with open('tests/gm_cert/server_en.key', 'r', encoding='utf-8') as file:
     cli_en_key = file.read()
 
-# sslctx1 = SSLContext(is_client_mode = True)
-# sslctx1.verify_peer = False
-# sslctx1.ca = ca
-# sslctx1.crt = cli_crt
-# sslctx1.key = cli_key
-# sslctx1.en_crt = cli_en_crt
-# sslctx1.en_key = cli_en_key
+sslctx1 = SSLContext(is_client_mode = True)
+sslctx1.verify_peer = False
+sslctx1.ca = ca
+sslctx1.crt = cli_crt
+sslctx1.key = cli_key
+sslctx1.en_crt = cli_en_crt
+sslctx1.en_key = cli_en_key
 
-# cli = ARPCClient(sslctx = sslctx1)
-# cli.add_message_listenner(ClientMsgLis())
+cli = ARPCClient(sslctx = sslctx1)
+cli.add_message_listenner(ClientMsgLis())
 
-# se = MessageB()
-# se.b = "xuyi haoshuai"
-# # se.age = 18
+se = MessageB()
+se.b = "xuyi haoshuai"
+# se.age = 18
 
-# ret = cli.call_remote(se)
+ret = cli.call_remote(se)
 
-# print(ret.__dict__, flush=True)
+def callback(ret: MessageA):
+    print(f"async ret = {ret.__dict__}", flush=True)
 
-# time.sleep(2)
+se = MessageB()
+se.b = "xuyi haoshuai wa"
+cli.call_remote_async(se, callback)
 
-# cli.close()
-# server.close()
+print(f"ret = {ret.__dict__}", flush=True)
+
+time.sleep(3)
+
+cli.close()
+server.close()

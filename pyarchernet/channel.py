@@ -194,7 +194,7 @@ class Channel():
             ARCHERLIB.ARCHER_channel_connect.restype = ctypes.c_char_p
             ret = ARCHERLIB.ARCHER_channel_connect(c_fd, c_host, c_port, c_verify_peer, c_ca, c_crt, c_key, c_en_crt, c_en_key, c_matched_host, c_named_curves,
                                             on_connect, on_read, on_error, on_close)
-            if ret is not None and ret == "":
+            if ret is not None and len(ret) > 0:
                 raise Exception(ret)
         self.__thread = threading.Thread(target=async_connect)
         self.__thread.start()

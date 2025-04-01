@@ -1,5 +1,6 @@
 import json, traceback, threading, time
 from typing import Any, Callable
+from abc import abstractmethod
 from .handlerlist import HandlerList
 from .handlers import Handler, BaseFrameHandler, ChannelContext
 from .channel import Channel
@@ -46,8 +47,11 @@ class ARPCClientMessageListenner:
         self.__lock = None
         self.__cond = None
         self.__val = None
+        self.__callback = None
 
-    
+    def set_callback(self, callback: Callable):
+        self.__callback = callback
+
     def set_sync(self, lock):
         self.__lock = lock
         self.__cond = threading.Condition(self.__lock)
@@ -84,10 +88,9 @@ class ARPCClientMessageListenner:
     def send_type(self):
         return self.__send_type
     
-    def on_message(self, return_type_val):
-        '''implements this method to handle receive message
-        '''
-        pass
+    @property
+    def callback(self)->Callable:
+        return self.__callback
 
 class ARPCServerMessageListenner:
 
@@ -105,18 +108,10 @@ class ARPCServerMessageListenner:
     def send_type(self):
         return self.__send_type
     
-    def handle_message(self, return_type_val):
-        self.on_message(return_type_val)
-        return self.do_send()
-    
-    def do_send(self)->Any:
-        '''implements this method to generate send message
-           or return None to do not send back
-        '''
-        pass
-    
-    def on_message(self, return_type_val):
+    @abstractmethod
+    def handle_receive_and_gen_send(self, return_type_val)->Any:
         '''implements this method to handle receive message
+           then generate a send message, or return None to avoid send back
         '''
         pass
 
@@ -158,7 +153,9 @@ class _ARPCClientHandler(Handler):
         if listenner.is_sync():
             listenner.unset_sync(ins)
         else:
-            listenner.on_message(ins)
+            callback = listenner.callback
+            if callback is not None:
+                callback(ins)
 
     def do_send(self, ctx: ChannelContext, send_ins):
         name = type(send_ins).__name__.lower()
@@ -201,7 +198,7 @@ class _ARPCServerHandler(Handler):
         T = listenner.receive_type
         ins = T()
         ins.__dict__ = json.loads(data)
-        ret = listenner.handle_message(ins)
+        ret = listenner.handle_receive_and_gen_send(ins)
         if ret is None:
             return 
         name = type(ret).__name__.lower()
@@ -264,11 +261,13 @@ class ARPCClient:
         self.__handler.receive_listenner[listenner.receive_type.__name__.lower()] = listenner
         self.__handler.send_listenner[listenner.send_type.__name__.lower()] = listenner
     
-    def call_remote_async(self, val):
+    def call_remote_async(self, val, callback: Callable):
         type_name = type(val).__name__.lower()
         if type_name not in self.__handler.send_listenner:
             raise Exception(f"type {type_name} can not be found")
         self.__check_connection()
+        listenner = self.__handler.send_listenner[type_name]
+        listenner.set_callback(callback)
         self.__handler.do_send(self.__ctx, val)
 
     def call_remote(self, val):
