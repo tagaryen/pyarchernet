@@ -1,4 +1,4 @@
-import json, traceback, threading, time
+import json, traceback, threading, time, os
 from typing import Any, Callable
 from abc import abstractmethod
 from .handlerlist import HandlerList
@@ -6,6 +6,7 @@ from .handlers import Handler, BaseFrameHandler, ChannelContext
 from .channel import Channel
 from .server_channel import ServerChannel
 from .sslcontext import SSLContext
+from .arpc_map import ARCPCallbackMap
 
 def _check_type_error(t):
     if t is None:
@@ -35,50 +36,11 @@ def _check_type_error(t):
 ARPC_TIMEOUT = 2
 
 class ARPCClientMessageListenner:
-    __lock: threading.Lock
-    __cond: threading.Condition
-    __val: None
-    
     def __init__(self, send_type: type, receive_type: type):
         if _check_type_error(send_type) or _check_type_error(receive_type):
             raise Exception("send_type and return must be class types")
         self.__send_type = send_type
         self.__receive_type = receive_type
-        self.__lock = None
-        self.__cond = None
-        self.__val = None
-        self.__callback = None
-
-    def set_callback(self, callback: Callable):
-        self.__callback = callback
-
-    def set_sync(self, lock):
-        self.__lock = lock
-        self.__cond = threading.Condition(self.__lock)
-    
-    def is_sync(self) -> bool:
-        return self.__lock is not None
-
-    def do_wait(self):
-        if self.__lock is None or self.__val is not None:
-            return 
-        start = int(time.time())
-        with self.__lock:
-            self.__cond.wait(ARPC_TIMEOUT)
-        if start + ARPC_TIMEOUT <= int(time.time()):
-            raise Exception("connect timeout")
-
-    def unset_sync(self, val):
-        with self.__lock:
-            self.__cond.notify_all()
-        self.__lock = None
-        self.__cond = None
-        self.__val = val
-    
-    def get_val(self):
-        val = self.__val
-        self.__val = None
-        return val
 
     @property
     def receive_type(self):
@@ -87,10 +49,6 @@ class ARPCClientMessageListenner:
     @property
     def send_type(self):
         return self.__send_type
-    
-    @property
-    def callback(self)->Callable:
-        return self.__callback
 
 class ARPCServerMessageListenner:
 
@@ -116,7 +74,7 @@ class ARPCServerMessageListenner:
         pass
 
 class _ARPCClientHandler(Handler):
-
+    call_map: ARCPCallbackMap
     receive_listenner: dict[str, ARPCClientMessageListenner]
     send_listenner: dict[str, ARPCClientMessageListenner]
     error_cb: None
@@ -126,6 +84,7 @@ class _ARPCClientHandler(Handler):
     def __init__(self, connect_message = None, error_cb: Callable = None):
         if connect_message is not None and _check_type_error(type(connect_message)):
             raise Exception(f"invalid on connect message type {type(connect_message)}")
+        self.call_map = ARCPCallbackMap()
         self.connect_message = connect_message
         self.receive_listenner = {}
         self.send_listenner = {}
@@ -140,9 +99,10 @@ class _ARPCClientHandler(Handler):
             ctx.to_prev_handler_on_write(name_len + name + data)
     
     def on_read(self, ctx: ChannelContext, data: bytes):
-        name_len = int.from_bytes(data[0:2], byteorder="big", signed=False)
-        name = str(data[2:2+name_len], 'utf-8')
-        data = str(data[2+name_len:], 'utf-8')
+        bytes16 = data[0:16];
+        name_len = int.from_bytes(data[16:18], byteorder="big", signed=False)
+        name = str(data[18:18+name_len], 'utf-8')
+        data = str(data[18+name_len:], 'utf-8')
         if name not in self.receive_listenner:
             self.on_error(ctx, Exception(f"can not found message listenner for {name}"))
             return 
@@ -150,21 +110,20 @@ class _ARPCClientHandler(Handler):
         T = listenner.receive_type
         ins = T()
         ins.__dict__ = json.loads(data)
-        if listenner.is_sync():
-            listenner.unset_sync(ins)
-        else:
-            callback = listenner.callback
-            if callback is not None:
-                callback(ins)
+        callback = self.call_map.get(bytes16)
+        if callback is not None:
+            callback(ins)
 
-    def do_send(self, ctx: ChannelContext, send_ins):
+    def do_send(self, ctx: ChannelContext, send_ins, callback: Callable):
         name = type(send_ins).__name__.lower()
         if name not in self.send_listenner:
             raise Exception(f"type {name} can not be found")
+        bytes16 = os.urandom(16)
+        self.call_map.add(bytes16, callback)
         name = name.encode('utf-8')
         name_len = len(name).to_bytes(2, byteorder="big", signed=False)
         data = json.dumps(send_ins.__dict__).encode('utf-8')
-        ctx.to_prev_handler_on_write(name_len+name+data)
+        ctx.to_prev_handler_on_write(bytes16+name_len+name+data)
 
     def on_error(self, ctx: ChannelContext, e: Exception):
         if self.error_cb is None:
@@ -188,9 +147,10 @@ class _ARPCServerHandler(Handler):
         self.send_listenner = {}
 
     def on_read(self, ctx: ChannelContext, data: bytes):
-        name_len = int.from_bytes(data[0:2], byteorder="big", signed=False)
-        name = str(data[2:name_len+2], 'utf-8')
-        data = str(data[2+name_len:], 'utf-8')
+        bytes16 = data[0:16]
+        name_len = int.from_bytes(data[16:18], byteorder="big", signed=False)
+        name = str(data[18:name_len+18], 'utf-8')
+        data = str(data[18+name_len:], 'utf-8')
         if name not in self.receive_listenner:
             self.on_error(ctx, Exception(f"can not found message listenner for {name}"))
             return 
@@ -208,7 +168,7 @@ class _ARPCServerHandler(Handler):
         name = name.encode('utf-8')
         name_len = len(name).to_bytes(2, byteorder="big", signed=False)
         data = json.dumps(ret.__dict__).encode('utf-8')
-        ctx.to_prev_handler_on_write(name_len + name + data)
+        ctx.to_prev_handler_on_write(bytes16 + name_len + name + data)
 
     def on_error(self, ctx: ChannelContext, e: Exception):
         if self.error_cb is None:
@@ -266,9 +226,7 @@ class ARPCClient:
         if type_name not in self.__handler.send_listenner:
             raise Exception(f"type {type_name} can not be found")
         self.__check_connection()
-        listenner = self.__handler.send_listenner[type_name]
-        listenner.set_callback(callback)
-        self.__handler.do_send(self.__ctx, val)
+        self.__handler.do_send(self.__ctx, val, callback)
 
     def call_remote(self, val):
         type_name = type(val).__name__.lower()
@@ -276,13 +234,22 @@ class ARPCClient:
             raise Exception(f"type {type_name} can not be found")
         self.__check_connection()
         listenner = self.__handler.send_listenner[type_name]
-        listenner.set_sync(threading.Lock())
-        self.__handler.do_send(self.__ctx, val)
-        listenner.do_wait()
-        ret = listenner.get_val()
-        if ret is None:
+        lock = threading.Lock()
+        cond = threading.Condition(lock)
+        ret = {"recv": None}
+        def callback_func(recv):
+            ret["recv"] = recv
+            with lock:
+                cond.notify_all()
+        self.__handler.do_send(self.__ctx, val, callback_func)
+        start = int(time.time())
+        with lock:
+            cond.wait(ARPC_TIMEOUT)
+        if start + ARPC_TIMEOUT <= int(time.time()):
+            raise Exception("wait for response timeout")
+        if ret["recv"] is None:
             raise Exception("can not get response")
-        return ret
+        return ret["recv"]
     
     def close(self):
         self.__channel.close()
