@@ -223,6 +223,8 @@ class ARPCClient:
             self.__channel_active_cond.notify_all()
 
     def set_connect_message(self, connect_message = None):
+        if connect_message is not None and _check_type_error(type(connect_message)):
+            raise Exception(f"invalid on connect message type {type(connect_message)}")
         self.__handler.connect_message = connect_message
     
     def set_error_cb(self, error_cb: Callable = None):
@@ -246,7 +248,6 @@ class ARPCClient:
         if type_name not in self.__handler.send_listenner:
             raise Exception(f"type {type_name} can not be found")
         self.__check_connection()
-        listenner = self.__handler.send_listenner[type_name]
         lock = threading.Lock()
         cond = threading.Condition(lock)
         ret = {"recv": None}
@@ -281,6 +282,11 @@ class ARPCServer:
 
     def close(self):
         self.__server.close()
+
+    def set_connect_message(self, connect_message):
+        if connect_message is not None and _check_type_error(type(connect_message)):
+            raise Exception(f"invalid on connect message type {type(connect_message)}")
+        self.__handler.connect_message = connect_message
 
     def set_error_cb(self, error_cb: Callable = None):
         self.__handler.error_cb = error_cb
