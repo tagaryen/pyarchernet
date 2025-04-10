@@ -75,11 +75,11 @@ class ARPCServerMessageListenner:
 
 class _ARPCClientHandler(Handler):
     call_map: ARCPCallbackMap
+    connect_msg: None
     receive_listenner: dict[str, ARPCClientMessageListenner]
     send_listenner: dict[str, ARPCClientMessageListenner]
     error_cb: None
     client: None
-
 
     def __init__(self, connect_message = None, error_cb: Callable = None):
         if connect_message is not None and _check_type_error(type(connect_message)):
@@ -93,10 +93,11 @@ class _ARPCClientHandler(Handler):
     def on_connect(self, ctx: ChannelContext):
         self.client.set_channel_context(ctx)
         if self.connect_message is not None:
+            bytes16 = os.urandom(16)
             name = type(self.connect_message).__name__.lower().encode('utf-8')
             name_len = len(name).to_bytes(2, byteorder="big", signed=False)
             data = json.dumps(self.connect_message.__dict__).encode('utf-8')
-            ctx.to_prev_handler_on_write(name_len + name + data)
+            ctx.to_prev_handler_on_write(bytes16 + name_len + name + data)
     
     def on_read(self, ctx: ChannelContext, data: bytes):
         bytes16 = data[0:16];
@@ -137,14 +138,26 @@ class _ARPCClientHandler(Handler):
 
 class _ARPCServerHandler(Handler):
 
+    connect_message: None
     receive_listenner: dict[str, ARPCServerMessageListenner]
     send_listenner: dict[str, ARPCServerMessageListenner]
     error_cb: None
 
-    def __init__(self, error_cb: Callable = None):
+    def __init__(self, connect_message = None, error_cb: Callable = None):
+        if connect_message is not None and _check_type_error(type(connect_message)):
+            raise Exception(f"invalid on connect message type {type(connect_message)}")
+        self.connect_message = connect_message
         self.error_cb = error_cb
         self.receive_listenner = {}
         self.send_listenner = {}
+
+    def on_connect(self, ctx: ChannelContext):
+        if self.connect_message is not None:
+            bytes16 = os.urandom(16)
+            name = type(self.connect_message).__name__.lower().encode('utf-8')
+            name_len = len(name).to_bytes(2, byteorder="big", signed=False)
+            data = json.dumps(self.connect_message.__dict__).encode('utf-8')
+            ctx.to_prev_handler_on_write(bytes16 + name_len + name + data)
 
     def on_read(self, ctx: ChannelContext, data: bytes):
         bytes16 = data[0:16]
