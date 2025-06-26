@@ -21,11 +21,14 @@ class Channel():
         self.__port = port
         self.__fd = 0
         self.__client_mode = client_mode
+        if client_mode:
+            self.__active = True
+        else:
+            self.__active = False
         if sslctx is not None and not sslctx.is_client_mode:
             raise Exception("can not use a server-side SSLContext at client side")
         self.__sslctx = sslctx
         self.__handler_list = handlerlist
-        self.__active = False
 
     def __check(self, host, port):
         if host is None or port is None or type(host) is not str or type(port) is not int:
@@ -82,7 +85,15 @@ class Channel():
             raise Exception("can not set fd")
         self.__fd = fd
 
+    def connect_async(self):
+        self.__is_async = True
+        self.__do_connect()
+
     def connect(self):
+        self.__is_async = False
+        self.__do_connect()
+
+    def __do_connect(self):
         '''connect to remote server
         '''        
         if not self.__client_mode:
@@ -102,6 +113,8 @@ class Channel():
         c_en_key = ctypes.c_char_p(None)
         c_matched_host = ctypes.c_char_p(None)
         c_named_curves = ctypes.c_char_p(None)
+        c_max_ver = ctypes.c_int32(0)
+        c_min_ver = ctypes.c_int32(0)
         if self.sslctx is not None:
             c_verify_peer = ctypes.c_int(1 if self.sslctx.verify_peer else 0)
             if self.sslctx.ca is not None:
@@ -116,8 +129,11 @@ class Channel():
                 c_matched_host = ctypes.c_char_p(self.sslctx.matched_hostname.encode('utf-8'))
             if self.sslctx.named_curves is not None:
                 c_named_curves = ctypes.c_char_p(self.sslctx.named_curves.encode('utf-8'))
+            c_max_ver = ctypes.c_int32(self.sslctx.max_version)
+            c_min_ver = ctypes.c_int32(self.sslctx.min_version)
+
+
         # 调用C函数
-        
         def client_on_error(error: bytes):
             if self.handlerlist is not None:
                 try:
@@ -127,13 +143,11 @@ class Channel():
                     else:
                         print(str(error, 'utf-8'))
                 except Exception as e:
-                    print(str(e))
-                    stack_trace = traceback.format_exc()
-                    print(stack_trace)
+                    traceback.print_exception(e)
 
 
         def client_on_connect():
-            self.on_connect()
+            self.__active = True
             if self.handlerlist is not None:
                 try:
                     ctx = self.handlerlist.find_channel_contxet(self)
@@ -143,9 +157,7 @@ class Channel():
                     if ctx is not None:
                         ctx.handler.on_error(ctx, e)
                     else:
-                        print(str(e))
-                        stack_trace = traceback.format_exc()
-                        print(stack_trace)
+                        traceback.print_exception(e)
 
         def client_on_read(data_ptr: ctypes.c_void_p, data_size: int):
             if self.handlerlist is not None:
@@ -158,12 +170,10 @@ class Channel():
                     if ctx is not None:
                         ctx.handler.on_error(ctx, e)
                     else:
-                        print(str(e))
-                        stack_trace = traceback.format_exc()
-                        print(stack_trace)
+                        traceback.print_exception(e)
 
         def client_on_close():
-            self.on_close()
+            self.__active = False
             if self.handlerlist is not None:
                 try:
                     ctx = self.handlerlist.find_channel_contxet(self)
@@ -173,9 +183,7 @@ class Channel():
                     if ctx is not None:
                         ctx.handler.on_error(ctx, e)
                     else:
-                        print(str(e))
-                        stack_trace = traceback.format_exc()
-                        print(stack_trace)
+                        traceback.print_exception(e)
 
 
         OnConnectCb = ctypes.CFUNCTYPE(None)
@@ -190,20 +198,25 @@ class Channel():
         OnCloseCb = ctypes.CFUNCTYPE(None)
         on_close = OnCloseCb(client_on_close)
 
-        def async_connect():
+        def block_connect():
             ARCHERLIB.ARCHER_channel_connect.restype = ctypes.c_char_p
-            ret = ARCHERLIB.ARCHER_channel_connect(c_fd, c_host, c_port, c_verify_peer, c_ca, c_crt, c_key, c_en_crt, c_en_key, c_matched_host, c_named_curves,
-                                            on_connect, on_read, on_error, on_close)
+            ret = ARCHERLIB.ARCHER_channel_connect(c_fd, c_host, c_port, c_verify_peer, 
+                                                   c_ca, c_crt, c_key, c_en_crt, c_en_key, 
+                                                   c_matched_host, c_named_curves, c_max_ver, c_min_ver,
+                                                   on_connect, on_read, on_error, on_close)
             if ret is not None and len(ret) > 0:
                 raise Exception(ret)
-        self.__thread = threading.Thread(target=async_connect)
-        self.__thread.start()
+        if self.__is_async:
+            self.__thread = threading.Thread(target=block_connect)
+            self.__thread.start()
+        else:
+            block_connect()
     
-    def on_connect(self):
-        self.__active = True
+    def get_id(self) -> int:
+        if self.__fd == 0:
+            return 0
+        return self.__fd + 65537
 
-    def on_close(self):
-        self.__active = False
 
     def send(self, data: bytes | str):
         data_bytes = None

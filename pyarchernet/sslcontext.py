@@ -8,6 +8,8 @@ class SSLContext():
     __en_key: str
     __matched_hostname: str
     __named_curves: str
+    __max_version: int
+    __min_version: int
 
     def __init__(self, is_client_mode=True):
         self.__is_client_mode = is_client_mode
@@ -19,6 +21,12 @@ class SSLContext():
         self.__en_key = None
         self.__matched_hostname = None
         self.__named_curves = None
+        if is_client_mode:
+            self.__max_version = 772
+            self.__min_version = 769
+        else:
+            self.__max_version = 772
+            self.__min_version = 769
 
 
     @property
@@ -38,7 +46,7 @@ class SSLContext():
         return self.__verify_peer
 
     @verify_peer.setter
-    def verify_peer(self, verify_peer):
+    def verify_peer(self, verify_peer) -> bool:
         self.__verify_peer = verify_peer
 
     @property
@@ -90,6 +98,27 @@ class SSLContext():
     @en_key.setter
     def en_key(self, en_key):
         self.__en_key = en_key
+
+    @property
+    def max_version(self)->int:
+        '''ssl 版本max
+        '''
+        return self.__max_version
+    
+    @max_version.setter
+    def max_version(self, max_version: int):
+        self.__max_version = max_version
+
+    @property
+    def min_version(self)->int:
+        '''ssl 版本min
+        '''
+        return self.__min_version
+    
+    @min_version.setter
+    def min_version(self, min_version: int):
+        self.__min_version = min_version
+
 
     @property
     def matched_hostname(self)->str:
