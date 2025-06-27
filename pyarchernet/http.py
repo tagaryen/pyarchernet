@@ -597,10 +597,7 @@ class HttpClientResponse():
         l = idx
         if l > 3:
             self.__headparsed = True
-        if l >= count - 1:
-            self.__cache = b'\n'.join(lines[l:])
-            return 
-        
+
         remain = b'\n'.join(lines[l:])
         if "content-length" in self.__headers:
             try:
@@ -608,6 +605,8 @@ class HttpClientResponse():
             except ValueError as r:
                 self.__ok = False
                 self.__err = "Bad Request. Bad Content-Length: " + self.__headers["content-length"]
+                return 
+            if l >= count - 1:
                 return 
             if len(remain) >= self.__content_length:
                 self.__content = remain[0:self.__content_length]
@@ -617,6 +616,8 @@ class HttpClientResponse():
 
         elif "transfer-encoding" in self.__headers and 'chunked' == self.__headers["transfer-encoding"]:
             self.__chunked = True
+            if l >= count - 1:
+                return 
             while True:
                 c = len(remain)
                 lf = remain.find(b'\n')
@@ -645,28 +646,37 @@ class HttpClientResponse():
             return 
     
     def __parse_content(self, text:bytes):
+        if len(text) <= 0:
+            return 
         if self.__chunked:
             text = self.__cache + text
             self.__cache = b''
-            while True:
+            c = len(text)
+            while c > 0:
                 lf = text.find(b'\n')
                 if lf <= 0:
                     self.__cache = text
                     return 
+                if lf == 1:
+                    text = text[1:]
+                    continue
                 chunked_len = int(text[0:lf].strip(), 16)
                 if chunked_len == 0:
                     self.__finished = True
                     return
-                if len(text[lf+1:]) < chunked_len:
+                if c < chunked_len+lf+1:
                     self.__cache = text
                     return 
                 else:
                     self.__content += text[lf+1: lf+1+chunked_len]
                     text = text[lf+1+chunked_len:]
+                    if len(text) <= 0:
+                        return 
                     if text[0] == '\r':
                         text = text[1:]
                     if text[0] == '\n':
                         text = text[1:]
+                c = len(text)
         else:
             exists_len = len(self.__content)
             need_len = self.__content_length - exists_len
@@ -771,21 +781,25 @@ class HttpClient():
                 newheaders["{}".format(k).strip().lower()] = "{}".format(v).strip()
         newheaders["host"] = "{}:{}".format(host, port)
         if "user-agent" not in newheaders:
-            newheaders["User-Agent"] = "Archer Net. Python"
+            newheaders["user-agent"] = "Archer-Net/Py"
         if "connection" not in newheaders:
-            newheaders["Connection"] = "close"
+            newheaders["connection"] = "close"
+        if "content-type" not in newheaders:
+            newheaders["content-type"] = "application/x-www-form-urlencoded"
+        if "accept" not in newheaders:
+            newheaders["accept"] = "text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2"
+        if "content-encoding" not in newheaders:
+            newheaders["content-encoding"] = "utf-8"
+        
         if body is not None:
-            if "content-type" not in newheaders:
-                newheaders["content-type"] = "text/txt"
             newheaders["content-length"] = "{}".format(len(body))
         else:
-            del newheaders["content-type"]
-            del newheaders["content-length"]
+            newheaders["content-length"] = "0"
 
         for k,v in newheaders.items():
             content += "{}: {}\r\n".format(k, v)
         content += "\r\n"
-        encoding =  newheaders["content-encoding"] if "content-encoding" in newheaders else 'utf-8'
+        encoding =  newheaders["content-encoding"]
         content = bytes(content, encoding)
         if body is not None:
             content += body

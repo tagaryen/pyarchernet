@@ -1,6 +1,7 @@
 from . import ARCHERLIB
 from .sslcontext import SSLContext
 from .handlerlist import HandlerList
+from .handlers import NetError
 
 import ctypes, json, threading, traceback
 
@@ -26,15 +27,15 @@ class Channel():
         else:
             self.__active = False
         if sslctx is not None and not sslctx.is_client_mode:
-            raise Exception("can not use a server-side SSLContext at client side")
+            raise NetError("can not use a server-side SSLContext at client side")
         self.__sslctx = sslctx
         self.__handler_list = handlerlist
 
     def __check(self, host, port):
         if host is None or port is None or type(host) is not str or type(port) is not int:
-            raise Exception(f"invalid host or port {host}, {port}")
+            raise NetError(f"invalid host or port {host}, {port}")
         if port <= 0 or port >= 65536:
-            raise Exception(f"invalid port {port}")
+            raise NetError(f"invalid port {port}")
     
     @property
     def host(self)->str:
@@ -59,7 +60,7 @@ class Channel():
         '''ssl证书上下文
         '''
         if sslctx is not None and not sslctx.is_client_mode:
-            raise Exception("can not use a server-side SSLContext at client side")
+            raise NetError("can not use a server-side SSLContext at client side")
         self.__sslctx = sslctx
     
     @property
@@ -82,7 +83,7 @@ class Channel():
            this is for server side new channel
         '''
         if self.__fd != 0 or fd == 0:
-            raise Exception("can not set fd")
+            raise NetError("initialize failed")
         self.__fd = fd
 
     def connect_async(self):
@@ -97,7 +98,7 @@ class Channel():
         '''connect to remote server
         '''        
         if not self.__client_mode:
-            raise Exception("server side channel can not connect to remote")
+            raise NetError("server side channel can not connect to remote")
 
         ARCHERLIB.ARCHER_channel_new_fd.restype = ctypes.c_int64
         self.__fd = ARCHERLIB.ARCHER_channel_new_fd()
@@ -139,9 +140,9 @@ class Channel():
                 try:
                     ctx = self.handlerlist.find_channel_contxet(self)
                     if ctx is not None:
-                        ctx.handler.on_error(ctx, Exception(str(error, 'utf-8')))
+                        ctx.handler.on_error(ctx, NetError(str(error, 'utf-8')))
                     else:
-                        print(str(error, 'utf-8'))
+                        print("ERROR: {}".format(str(error, 'utf-8')))
                 except Exception as e:
                     traceback.print_exception(e)
 
@@ -205,7 +206,7 @@ class Channel():
                                                    c_matched_host, c_named_curves, c_max_ver, c_min_ver,
                                                    on_connect, on_read, on_error, on_close)
             if ret is not None and len(ret) > 0:
-                raise Exception(ret)
+                raise NetError(ret)
         if self.__is_async:
             self.__thread = threading.Thread(target=block_connect)
             self.__thread.start()
@@ -227,7 +228,7 @@ class Channel():
         elif isinstance(data, dict) or isinstance(data, list):
             data_bytes = json.dumps(data).encode('utf-8')
         else :
-            raise Exception(f"can not send type {type(data)}")
+            raise NetError("can not send type {}".format(type(data)))
         c_fd = ctypes.c_int64(self.__fd)
         c_data = ctypes.create_string_buffer(data_bytes)
         c_size = ctypes.c_int32(len(data_bytes))

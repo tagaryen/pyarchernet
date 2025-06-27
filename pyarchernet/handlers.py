@@ -3,6 +3,11 @@ from .fair_lock import FairLock
 
 import threading, traceback, json
 
+class NetError(RuntimeError):
+    def __init__(self, *args):
+        super().__init__(*args)
+
+
 class ChannelContext:
     __channel: None
     __handler: None
@@ -15,6 +20,12 @@ class ChannelContext:
         self.__prev_ctx = prev_ctx
         self.__next_ctx = next_ctx
     
+    def __error(self, msg: str):
+        if self.__handler is None:
+            print("ERROR: {}".format(msg))
+        else:
+            self.__handler.on_error(self, NetError(msg))
+
     def __to_bytes(self, data: bytes| str):
         data_bytes = None
         if isinstance(data, bytes):
@@ -24,7 +35,7 @@ class ChannelContext:
         elif isinstance(data, dict) or isinstance(data, list):
             data_bytes = json.dumps(data).encode('utf-8')
         else :
-            raise Exception(f"can not send type {type(data)}")
+            self.__error("can not send type {}".format(type(data)))
 
         return data_bytes
 
@@ -42,25 +53,24 @@ class ChannelContext:
 
     def to_next_handler_on_connect(self):
         if self.__next_ctx is None:
-            raise Exception("can not found next handler")
+            self.__error("can not found next handler")
         self.__next_ctx.handler.on_connect(self.__next_ctx)
     
     def to_next_handler_on_read(self, data: bytes):
         if self.__next_ctx is None:
-            raise Exception("can not found next handler")
-        self.__next_ctx.handler.on_read(self.__next_ctx, data)
+            self.__error("can not found next handler")
+        else:
+            self.__next_ctx.handler.on_read(self.__next_ctx, data)
     
     def to_next_handler_on_error(self, e: Exception):
         if self.__next_ctx is None:
-            print(str(e))
-            stack_trace = traceback.format_exc()
-            print(stack_trace)
+            traceback.print_exception(e)
         else:
             self.__next_ctx.handler.on_error(self.__next_ctx, e)
     
     def to_next_handler_on_close(self):
         if self.__next_ctx is None:
-            raise Exception("can not found next handler")
+            self.__error("can not found next handler")
         self.__next_ctx.handler.on_close(self.__next_ctx)
 
     def to_prev_handler_on_write(self, data: bytes | str):

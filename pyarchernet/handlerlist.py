@@ -1,5 +1,5 @@
 
-from .handlers import Handler, ChannelContext
+from .handlers import Handler, ChannelContext, NetError
 
 class HandlerList:
     __handlers: list[Handler]
@@ -37,14 +37,14 @@ class HandlerList:
 
     def insert_handler(self, index: int, handler: Handler):
         if index > len(self.__handlers) or index < 0:
-            raise Exception("index out of bound")
+            raise NetError("index out of bound")
         if index == len(self.__handlers):
             self.add_handler(handler)
         self.__handlers.insert(index, handler)
 
     def remove_handler(self, index: int):
         if index > len(self.__handlers) or index < 0:
-            raise Exception("index out of bound")
+            raise NetError("index out of bound")
         del self.__handlers[index]
 
 
