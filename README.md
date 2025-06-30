@@ -3,5 +3,5 @@ network framework based on c library, support latest openssl(gmssl) 1.3
 support encrypted key and encrypted certificate  
 pip:  
 ``` cmd
-  pip install pyarchernet==1.1.7
+  pip install pyarchernet==1.2.0
 ``` 
