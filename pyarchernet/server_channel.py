@@ -1,7 +1,6 @@
 from . import ARCHERLIB
 from .channel import Channel
-from .handlerlist import HandlerList
-from .handlers import NetError
+from .handlers import NetError, HandlerList
 from .sslcontext import SSLContext
 from .unordered_map import UnorderedMap
 

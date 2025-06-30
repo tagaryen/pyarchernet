@@ -1,7 +1,6 @@
 from . import ARCHERLIB
 from .sslcontext import SSLContext
-from .handlerlist import HandlerList
-from .handlers import NetError
+from .handlers import NetError, HandlerList
 
 import ctypes, json, threading, traceback
 

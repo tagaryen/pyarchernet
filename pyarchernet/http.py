@@ -1,6 +1,5 @@
 from .channel import Channel
-from .handlers import Handler, ChannelContext
-from .handlerlist import HandlerList
+from .handlers import Handler, ChannelContext, HandlerList
 from .sslcontext import SSLContext
 from .unordered_map import UnorderedMap
 from .server_channel import ServerChannel
@@ -473,9 +472,8 @@ class HttpServer():
             threads = 128
         if threads < 0:
             threads = 0
-        self._threads = threads
-        self._sslctx = sslctx
-        pass
+        self.__threads = threads
+        self.__sslctx = sslctx
 
     def listen_async(self, host: str, port: int, handler: BlockedHttpHandler):
         self.__do_listen(host, port, handler=handler, is_async=True)
@@ -488,7 +486,7 @@ class HttpServer():
             raise Exception("param handler is None")
         handlerList = HandlerList()
         handlerList.add_handler(handler)
-        self.__server = ServerChannel(host, port, self._threads, self._sslctx, handlerlist=handlerList)
+        self.__server = ServerChannel(host, port, self.__threads, self.__sslctx, handlerlist=handlerList)
         if is_async:
             self.__server.listen_async()
         else:

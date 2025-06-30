@@ -22,8 +22,8 @@ class SSLContext():
         self.__matched_hostname = None
         self.__named_curves = None
         if is_client_mode:
-            self.__max_version = 771
-            self.__min_version = 770
+            self.__max_version = 772
+            self.__min_version = 769
         else:
             self.__max_version = 772
             self.__min_version = 769
