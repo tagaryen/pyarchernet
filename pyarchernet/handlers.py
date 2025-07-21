@@ -234,16 +234,24 @@ class HandlerList:
     def add_handler(self, handler: Handler):
         if handler is None:
             return 
+        if not isinstance(handler, Handler):
+            raise ValueError("handler must be Handler")
         self.__handlers.append(handler)
 
     def insert_handler(self, index: int, handler: Handler):
+        if not isinstance(index, int):
+            raise ValueError("index must be int")
         if index > len(self.__handlers) or index < 0:
-            raise NetError("index out of bound")
+            raise ValueError("index out of bound")
+        if handler is None or not isinstance(handler, Handler):
+            raise ValueError("handler must be Handler")
         if index == len(self.__handlers):
             self.add_handler(handler)
         self.__handlers.insert(index, handler)
 
     def remove_handler(self, index: int):
+        if not isinstance(index, int):
+            raise ValueError("index must be int")
         if index > len(self.__handlers) or index < 0:
-            raise NetError("index out of bound")
+            raise ValueError("index out of bound")
         del self.__handlers[index]

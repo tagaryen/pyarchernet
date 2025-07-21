@@ -99,6 +99,10 @@ class _ARPCServerHandler(_ARPCHandler):
 
 class ARPCServer():
     def __init__(self, threads: int = 0, sslctx: SSLContext = None):
+        if not isinstance(threads, int):
+            raise ValueError("Threads must be a int")
+        if sslctx is not None and not isinstance(sslctx, SSLContext):
+            raise ValueError("Sslctx must be SSLContext")
         if threads > 128:
             threads = 128
         if threads < 0:
@@ -114,8 +118,10 @@ class ARPCServer():
         self.__do_listen(host, port, handler=self.__handler, is_async=False)
     
     def __do_listen(self, host: str, port: int, handler: _ARPCServerHandler, is_async: bool):
-        if handler is None:
-            raise Exception("param handler is None")
+        if not isinstance(host, str):
+            raise ValueError("host must be a int")
+        if not isinstance(port, int):
+            raise ValueError("port must be a int")
         handlerList = HandlerList()
         handlerList.add_handler(BaseFrameHandler())
         handlerList.add_handler(self.__handler)
@@ -129,6 +135,10 @@ class ARPCServer():
         self.__server.close()
 
     def add_url_matcher(self, url: str, matcher: AbstractUrlMatcher):
+        if not isinstance(url, str):
+            raise ValueError("url must be a int")
+        if not isinstance(matcher, AbstractUrlMatcher):
+            raise ValueError("matcher must be AbstractUrlMatcher")
         self.__handler.add_url_matcher(url, matcher=matcher)
 
 class _ARPCClientHandler(_ARPCHandler):
@@ -186,6 +196,12 @@ class ARPCClient():
     __ctx_cnd: threading.Condition
 
     def __init__(self, host: str, port: int, sslctx: SSLContext = None):
+        if not isinstance(host, str):
+            raise ValueError("host must be a int")
+        if not isinstance(port, int):
+            raise ValueError("port must be int")
+        if sslctx is not None and not isinstance(sslctx, SSLContext):
+            raise ValueError("sslctx must be SSLContext")
         self.__host = host
         self.__port = port
         self.__sslctx = sslctx
@@ -217,6 +233,10 @@ class ARPCClient():
             raise NetError("Connect timeout")
     
     def call(self, url: str, data: dict) -> dict:
+        if not isinstance(url, str):
+            raise ValueError("url must be a int")
+        if not isinstance(data, dict):
+            raise ValueError("data must be dict")
         self.__do_connect()
         msg = {'res': None}
         msg_lock = threading.Lock()
@@ -236,6 +256,12 @@ class ARPCClient():
         return msg['res']
     
     def call_async(self, url: str, data: dict, msg_callback: Callable):
+        if not isinstance(url, str):
+            raise ValueError("url must be a int")
+        if not isinstance(data, dict):
+            raise ValueError("data must be dict")
+        if msg_callback is not None and not isinstance(msg_callback, Callable):
+            raise ValueError("msg_callback must be Callable")
         self.__do_connect()
         self.__handler.add_url_cb(url, msg_callback)
         res = b'{}' if data is None else json.dumps(data)

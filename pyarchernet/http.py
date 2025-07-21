@@ -5,9 +5,12 @@ from .unordered_map import UnorderedMap
 from .server_channel import ServerChannel
 
 from urllib.parse import unquote
-import threading, traceback
+import threading
 from abc import abstractmethod
 from datetime import datetime
+import random
+
+_LRN = "\r\n"
 
 class HttpError(RuntimeError):
     def __init__(self, *args):
@@ -71,7 +74,7 @@ class HttpStatusCode():
     NOT_EXTENDED = 510
     NETWORK_AUTHENTICATION_REQUIRED = 511
 
-def __status_to_statusmessage(code: int) -> str:
+def _status_to_statusmessage(code: int) -> str:
     code_map = {
         100: "Continue", 
         101: "Switching Protocols", 
@@ -134,6 +137,102 @@ def __status_to_statusmessage(code: int) -> str:
         return "Bad Request"
     return code_map[code]
 
+class Multipart():
+
+    MULTIPART_HEADER_PREFIX = "multipart/form-data; boundary="
+
+    def __init__(self, name: str, value: str, isFile=False, filename="", contentType='text/txt'):
+        if not isinstance(name, str):
+            raise ValueError("Invalid multipart name, name must be a string")
+        if not isinstance(value, str):
+            raise HttpError("Invalid multipart value, value must be a str")
+        if not isinstance(isFile, bool):
+            raise HttpError("Invalid multipart isFile, isFile must be a bool")
+        if not isinstance(filename, str):
+            raise HttpError("Invalid multipart filename, filename must be a string")
+        if not isinstance(contentType, str):
+            raise HttpError("Invalid multipart contentType, contentType must be a string")
+        self.name = name
+        self.value = value
+        self.isFile = isFile
+        self.filename = filename
+        self.contentType = contentType
+    
+    def toPartBody(self) -> str:
+        ret = "Content-Disposition: form-data; name=\"{}\"".format(self.name)
+        if self.isFile:
+            ret += "; filename=\"{}\"\r\n".format(self.filename)
+            ret += "Content-Type: {}\r\n\r\n{}\r\n".format(self.contentType, self.value)
+        else:
+            ret +=  "\r\n\r\n{}\r\n".format(self.value)
+        
+        return ret
+
+class FormData():
+    @staticmethod
+    def generateBoundary() -> str:
+        s = ''
+        for i in range(0, 24):
+            s += str(random.randint(0, 9))
+        return "--------------------------" + s
+
+    @staticmethod
+    def generateMultipartBody(multiparts: list[Multipart], boundary: str) -> bytes:
+        if not isinstance(multiparts, list):
+            raise ValueError("multiparts must be list[Multipart]")
+        if not isinstance(boundary, str):
+            raise ValueError("boundary must be string")
+        bd = "--{}".format(boundary)
+        ret = ""
+        for m in multiparts:
+            ret += "{}\r\n{}".format(bd, m.toPartBody())
+        ret += "{}--".format(bd)
+        return bytes(ret, 'utf-8')
+    
+    @staticmethod
+    def parseBodyToMultiparts(body: bytes, boundary: str) -> list[Multipart]:
+        if not isinstance(body, bytes):
+            raise ValueError("body must be bytes")
+        if not isinstance(boundary, str):
+            raise ValueError("boundary must be string")
+        bd = bytes("--" + boundary, 'utf-8')
+        s, e = bd + b"\r\n", bd + b"--"
+        if not body.startswith(s) or not body.endswith(e):
+            if not body.endswith(e):
+                e += b"\r\n"
+                if not body.endswith(e):
+                    raise HttpError(400, "Bad Request")
+        content = body[len(s): len(body) - len(e)]
+        ret = []
+        parts = content.split(bd)
+        for p in parts:
+            hb = p.index(b'\r\n\r\n')
+            key = p[:hb]
+            val = p[hb + 4:]
+            part = Multipart('', '')
+            
+            for head in key.split(b'\r\n'):
+                if head.startswith(b'Content-Disposition: form-data; '):
+                    for item in head[len(b'Content-Disposition: form-data; '):].split(b'; '):
+                        try:
+                            eq = item.index(b'="')
+                        except Exception as e:
+                            continue
+                        k = item[:eq]
+                        v = item[eq+2: len(item) - 1]
+                        if b'name' == k:
+                            part.name = str(v, 'utf-8').strip()
+                        elif b'filename' == k:
+                            part.filename = str(v, 'utf-8').strip()
+                            part.isFile = True
+                if head.startswith(b'Content-Type: '):
+                    part.contentType = str(head[len(b'Content-Type: '):], 'utf-8').strip()
+            if val.endswith(b'\r\n'):
+                val = str(val[:len(val)-2], 'utf-8')
+            part.value = val
+            ret.append(part)
+        return ret
+
 class HttpRequest():
 
     __host: str
@@ -143,6 +242,8 @@ class HttpRequest():
     __uri: str
 
     def __init__(self, ctx: ChannelContext):
+        if ctx is None or not isinstance(ctx, ChannelContext):
+            raise ValueError("ctx must be ChannelContext")
         self.__host = ctx.channel.host
         self.__port = ctx.channel.port
         self.__method = "GET"
@@ -234,7 +335,7 @@ class HttpRequest():
 
 
     def __parse_head(self, text: bytes):
-        lines = text.splitlines()
+        lines = text.splitlines(keepends=True)
         count = len(lines)
         if count < 3:
             self.__ok = False
@@ -335,9 +436,9 @@ class HttpRequest():
                 else:
                     self.__content += text[lf+1: lf+1+chunked_len]
                     text = text[lf+1+chunked_len:]
-                    if text[0] == '\r':
+                    if text[0] == 13:
                         text = text[1:]
-                    if text[0] == '\n':
+                    if text[0] == 10:
                         text = text[1:]
         else:
             exists_len = len(self.__content)
@@ -355,23 +456,33 @@ class HttpResponse():
         self.__version = "HTTP/1.1"
         self.__status_code = 200
         self.__status = "200 OK"
-        self.__raw_headers = "Server: Archer HTTP Server Python\r\nConnection: close\r\n"
+        self.__raw_headers = "Server: ArcherNet/Python\r\nConnection: close\r\n"
         self.__headers = {}
         self.__encoding = 'utf-8'
         self.__content = None
         self.__content_length = 0
 
     def set_status(self, code: int):
+        if code is None or not isinstance(code, int):
+            raise ValueError("code must be int")
         self.__status_code = code
-        self.__status = code + " " + __status_to_statusmessage(code)
+        self.__status = code + " " + _status_to_statusmessage(code)
 
     def set_header(self, key:str, val:str):
+        if key is None or not isinstance(key, str):
+            raise ValueError("key must be str")
+        if val is None or not isinstance(val, str):
+            raise ValueError("val must be str")
         self.__headers[key.lower()] = val
 
     def get_header(self, key:str):
+        if key is None or not isinstance(key, str):
+            raise ValueError("key must be str")
         return self.__headers[key.lower()]
 
     def set_content_encoding(self, encodig:str):
+        if encodig is None or not isinstance(encodig, str):
+            raise ValueError("encodig must be str")
         self.__encoding = encodig
     
     def set_content(self, content: str|bytes):
@@ -379,6 +490,8 @@ class HttpResponse():
             self.__content = bytes(content, encoding=self.__encoding)
         elif isinstance(content, bytes):
             self.__content = content
+        else:
+            raise ValueError("content must be str or bytes")
         self.__content_length = len(self.__content)
         self.__headers["content-length"] = self.__content_length
 
@@ -415,7 +528,7 @@ class BlockedHttpHandler(Handler):
             req._HttpRequest__parse_content(data)
         if not req.ok:
             res.set_status(HttpStatusCode.BAD_REQUEST)
-            self.on_http_error(Exception(req.__err))
+            self.on_http_error(ValueError(req.__err))
         else:
             res._HttpResponse__version = req._HttpRequest__version
             if req.finished:
@@ -468,6 +581,10 @@ class BlockedHttpHandler(Handler):
 
 class HttpServer():
     def __init__(self, threads: int = 0, sslctx: SSLContext = None):
+        if threads is None or not isinstance(threads, int):
+            raise ValueError("threads must be int")
+        if sslctx is not None and not isinstance(sslctx, SSLContext):
+            raise ValueError("sslctx must be SSLContext")
         if threads > 128:
             threads = 128
         if threads < 0:
@@ -482,8 +599,12 @@ class HttpServer():
         self.__do_listen(host, port, handler=handler, is_async=False)
     
     def __do_listen(self, host: str, port: int, handler: BlockedHttpHandler, is_async: bool):
-        if handler is None:
-            raise Exception("param handler is None")
+        if host is None or not isinstance(host, str):
+            raise ValueError("host must be str")
+        if port is not None and not isinstance(port, int):
+            raise ValueError("port must be int")
+        if handler is None or not isinstance(handler, BlockedHttpHandler):
+            raise ValueError("handler must be BlockedHttpHandler")
         handlerList = HandlerList()
         handlerList.add_handler(handler)
         self.__server = ServerChannel(host, port, self.__threads, self.__sslctx, handlerlist=handlerList)
@@ -552,32 +673,29 @@ class HttpClientResponse():
         return self.__headers
 
     def __parse_head(self, text: bytes):
-        lines = text.splitlines()
+        lines = text.split(b'\n')
         count = len(lines)
         if count < 3:
             self.__ok = False
-            self.__err = "Invalid Http Response. "
+            self.__ex = HttpError(502, "Invalid Http Response. ")
             return 
         title = str(lines[0], 'utf-8').strip()
-        p = title.find(' ')
-        if p <= 0:
+        ts = title.split(' ')
+        if len(ts) < 2 or len(ts) > 3:
             self.__ok = False
-            self.__err = "Invalid Http Response. Bad Head " + title
+            self.__ex = HttpError(502, "Invalid Http Response. Bad Head " + title)
             return 
-        self.__version = title[0:p].strip()
-        title = title[p+1:].strip()
-        p = title.find(' ')
-        if p <= 0:
-            self.__ok = False
-            self.__err = "Invalid Http Response. Bad Head " + title
-            return 
+        self.__version = ts[0].strip()
         try:
-            self.__status_code = int(title[0:p].strip())
+            self.__status_code = int(ts[1].strip())
         except ValueError:
             self.__ok = False
-            self.__err = "Invalid Http Response. Bad Status Code {}".format(title[0:p].strip())
+            self.__ex = HttpError(502, "Invalid Http Response. Bad Status Code {}".format(ts[1].strip()))
             return 
-        self.__status_msg = "{} {}".format(self.__status_code, title[p+1:].strip())
+        if len(ts) == 3:
+            self.__status_msg = "{} {}".format(self.__status_code, ts[2].strip())
+        else:
+            self.__status_msg = "{} {}".format(self.__status_code, _status_to_statusmessage(self.__status_code))
         idx = 0
         for i in range(1, count):
             line = str(lines[i], 'utf-8').strip()
@@ -587,7 +705,7 @@ class HttpClientResponse():
             t = line.find(':')
             if t <= 0 or t >= len(line) - 1:
                 self.__ok = False
-                self.__err = "Bad Request. Bad Header " + line
+                self.__ex = HttpError(502, "Bad Request. Bad Header " + line)
                 return 
             k = line[0:t].strip()
             v = line[t+1:].strip()
@@ -595,8 +713,7 @@ class HttpClientResponse():
         l = idx
         if l > 3:
             self.__headparsed = True
-
-        remain = b'\n'.join(lines[l:])
+        
         if "content-length" in self.__headers:
             try:
                 self.__content_length = int(self.__headers["content-length"])
@@ -605,17 +722,26 @@ class HttpClientResponse():
                 self.__err = "Bad Request. Bad Content-Length: " + self.__headers["content-length"]
                 return 
             if l >= count - 1:
+                if self.__content_length <= 0:
+                    self.__finished = True
                 return 
+            
+            remain = b'\n'.join(lines[l:])
             if len(remain) >= self.__content_length:
                 self.__content = remain[0:self.__content_length]
                 self.__finished = True
             else:
                 self.__content = remain
+            
+            if self.__content_length <= 0 or len(self.__content) >= self.__content_length:
+                self.__finished = True
 
         elif "transfer-encoding" in self.__headers and 'chunked' == self.__headers["transfer-encoding"]:
             self.__chunked = True
             if l >= count - 1:
                 return 
+            
+            remain = b'\n'.join(lines[l:])
             while True:
                 c = len(remain)
                 lf = remain.find(b'\n')
@@ -640,7 +766,7 @@ class HttpClientResponse():
                         remain = remain[1:]
         else:
             self.__ok = False
-            self.__err = "Bad Request. Unknown content"
+            self.__ex = HttpError(502, "Bad Request. Unknown content")
             return 
     
     def __parse_content(self, text:bytes):
@@ -670,9 +796,9 @@ class HttpClientResponse():
                     text = text[lf+1+chunked_len:]
                     if len(text) <= 0:
                         return 
-                    if text[0] == '\r':
+                    if text[0] == 13:
                         text = text[1:]
-                    if text[0] == '\n':
+                    if text[0] == 10:
                         text = text[1:]
                 c = len(text)
         else:
@@ -698,20 +824,22 @@ class _HttpClientHandler(Handler):
         ctx.to_prev_handler_on_write(self.req_text)
 
     def on_read(self, ctx: ChannelContext, data: bytes):
-        if not self.res.headparsed:
-            self.res._HttpClientResponse__parse_head(data)
-        else:
-            self.res._HttpClientResponse__parse_content(data)
-        
-        if not self.res.ok:
-            self.on_finish(ctx)
-        
-        if self.res.finished:
-            self.on_finish(ctx)
+        try:
+            if not self.res.headparsed:
+                self.res._HttpClientResponse__parse_head(data)
+            else:
+                self.res._HttpClientResponse__parse_content(data)
+            if not self.res.ok:
+                self.on_finish(ctx)
+            if self.res.finished:
+                self.on_finish(ctx)
+        except Exception as e:
+            self.on_error(ctx, e)
         
         
     def on_error(self, ctx: ChannelContext, e: Exception):
-        self.res._HttpClientResponse__ex = e
+        if self.res._HttpClientResponse__ex is None:
+            self.res._HttpClientResponse__ex = e
     
     def on_finish(self, ctx: ChannelContext):
         ctx.close()
@@ -752,51 +880,60 @@ class HttpClient():
         else:
             raise ValueError("Invalid url " + url)
         c = len(t)
-        endpoint_idx = t.find("/")
-        if endpoint_idx <= 0:
-            endpoint_idx = c
-        endpoint = t[0:endpoint_idx]
-        host_port = endpoint.split(':')
-        if len(host_port) == 1:
-            host = host_port[0]
+        d,u = t.find("/"), t.find(':')
+        if d < 0 and u < 0:
+            host = t
             port = 443 if ssl else 80
-        elif len(host_port) == 2:
-            host = host_port[0]
-            port = int(host_port[1])
+            t = ""
+        elif d < u or u < 0:
+            host = t[0:d]
+            port = 443 if ssl else 80
+            t = t[d:]
         else:
-            raise ValueError("Invalid url " + url)
-        if endpoint_idx == c:
+            host = t[0:u]
+            port = int(t[u+1:d])
+            t = t[d:]
+        
+        if t == '':
             uri = '/'
         else:
-            uri = t[endpoint_idx:]
-        content = "{} {} HTTP/1.1\r\n".format(method, uri)
+            uri = t
+        content = "{} {} HTTP/1.1{}".format(method, uri, _LRN)
+
         newheaders = {}
+        
+        if "content-type" not in newheaders:
+            newheaders["content-type"] = "application/x-www-form-urlencoded"
+        if "accept" not in newheaders:
+            newheaders["accept"] = "text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2"
+        if body is not None:
+            newheaders["content-length"] = "{}".format(len(body))
+        else:
+            newheaders["content-length"] = "0"
+        if "content-encoding" not in newheaders:
+            newheaders["content-encoding"] = "utf-8"
 
         if headers is not None:
             if not isinstance(headers, dict):
                 raise ValueError("Invalid headers type {}".format(type(headers)))
             for k, v in headers.items():
                 newheaders["{}".format(k).strip().lower()] = "{}".format(v).strip()
-        newheaders["host"] = "{}:{}".format(host, port)
-        if "user-agent" not in newheaders:
-            newheaders["user-agent"] = "Archer-Net/Py"
-        if "connection" not in newheaders:
-            newheaders["connection"] = "close"
-        if "content-type" not in newheaders:
-            newheaders["content-type"] = "application/x-www-form-urlencoded"
-        if "accept" not in newheaders:
-            newheaders["accept"] = "text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2"
-        if "content-encoding" not in newheaders:
-            newheaders["content-encoding"] = "utf-8"
+
         
-        if body is not None:
-            newheaders["content-length"] = "{}".format(len(body))
+        content += "host: {}:{}{}".format(host, port, _LRN)
+        if "user-agent" in newheaders:
+            content += "user-agent: {}".format(newheaders["user-agent"], _LRN)
         else:
-            newheaders["content-length"] = "0"
+            content += "user-agent: Archer-Net_Python/1.10{}".format(_LRN)
+        if "connection" in newheaders:
+            content += "connection: {}{}".format(newheaders["connection"], _LRN)
+        else:
+            content += "connection: close{}".format(_LRN)
 
         for k,v in newheaders.items():
-            content += "{}: {}\r\n".format(k, v)
-        content += "\r\n"
+            content += "{}: {}{}".format(k, v, _LRN)
+        
+        content += "{}".format(_LRN)
         encoding =  newheaders["content-encoding"]
         content = bytes(content, encoding)
         if body is not None:
@@ -816,9 +953,7 @@ class HttpClient():
         ch.connect()
 
         res = handler.res
-        if res._HttpClientResponse__ex is not None:
+        if res._HttpClientResponse__ex is not None or not res.ok:
             raise res._HttpClientResponse__ex
-        if not res.ok:
-            raise HttpError(res._HttpClientResponse__err)
         
         return res

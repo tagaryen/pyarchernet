@@ -17,6 +17,12 @@ class Channel():
 
     def __init__(self, host="127.0.0.1", port=9617, client_mode=True, sslctx: SSLContext = None, handlerlist:HandlerList = None):
         self.__check(host, port)
+        if not isinstance(client_mode, bool):
+            raise ValueError("client_mode must be a bool")
+        if sslctx is not None and not isinstance(sslctx, SSLContext):
+            raise ValueError("sslctx must be SSLContext")
+        if handlerlist is not None and not isinstance(handlerlist, HandlerList):
+            raise ValueError("handlerlist must be SSLContext")
         self.__host = host
         self.__port = port
         self.__fd = 0
@@ -59,7 +65,7 @@ class Channel():
         '''ssl证书上下文
         '''
         if sslctx is not None and not sslctx.is_client_mode:
-            raise NetError("can not use a server-side SSLContext at client side")
+            raise ValueError("can not use a server-side SSLContext at client side")
         self.__sslctx = sslctx
     
     @property
@@ -75,6 +81,8 @@ class Channel():
         return self.__handler_list
 
     def set_handlerlist(self, handlerlist:HandlerList):
+        if handlerlist is not None and not isinstance(handlerlist, HandlerList):
+            raise ValueError("handlerlist must be SSLContext")
         self.__handler_list = handlerlist
 
     def setfd(self, fd: int):
@@ -129,6 +137,8 @@ class Channel():
                 c_matched_host = ctypes.c_char_p(self.sslctx.matched_hostname.encode('utf-8'))
             if self.sslctx.named_curves is not None:
                 c_named_curves = ctypes.c_char_p(self.sslctx.named_curves.encode('utf-8'))
+            if self.sslctx.max_version < self.sslctx.min_version:
+                self.sslctx.min_version = self.sslctx.max_version
             c_max_ver = ctypes.c_int32(self.sslctx.max_version)
             c_min_ver = ctypes.c_int32(self.sslctx.min_version)
 

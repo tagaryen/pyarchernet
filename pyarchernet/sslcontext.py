@@ -12,6 +12,8 @@ class SSLContext():
     __min_version: int
 
     def __init__(self, is_client_mode=True):
+        if is_client_mode is None or not isinstance(is_client_mode, bool):
+            raise ValueError("is_client_mode must be bool")
         self.__is_client_mode = is_client_mode
         self.__verify_peer = True
         self.__ca = None
@@ -57,6 +59,8 @@ class SSLContext():
     
     @ca.setter
     def ca(self, ca):
+        if ca is not None and not isinstance(ca, str):
+            raise ValueError("ca must be str")
         self.__ca = ca
 
     @property
@@ -67,6 +71,8 @@ class SSLContext():
     
     @crt.setter
     def crt(self, crt):
+        if crt is not None and not isinstance(crt, str):
+            raise ValueError("crt must be str")
         self.__crt = crt
 
     @property
@@ -77,6 +83,8 @@ class SSLContext():
     
     @key.setter
     def key(self, key):
+        if key is not None and not isinstance(key, str):
+            raise ValueError("key must be str")
         self.__key = key
 
     @property
@@ -87,6 +95,8 @@ class SSLContext():
     
     @en_crt.setter
     def en_crt(self, en_crt):
+        if en_crt is not None and not isinstance(en_crt, str):
+            raise ValueError("en_crt must be str")
         self.__en_crt = en_crt
 
     @property
@@ -97,6 +107,8 @@ class SSLContext():
     
     @en_key.setter
     def en_key(self, en_key):
+        if en_key is not None and not isinstance(en_key, str):
+            raise ValueError("en_key must be str")
         self.__en_key = en_key
 
     @property
@@ -107,6 +119,12 @@ class SSLContext():
     
     @max_version.setter
     def max_version(self, max_version: int):
+        if max_version is not None and not isinstance(max_version, int):
+            raise ValueError("max_version must be int")
+        if max_version > 772:
+            max_version = 722
+        if max_version < 769:
+            max_version = 769
         self.__max_version = max_version
 
     @property
@@ -117,6 +135,12 @@ class SSLContext():
     
     @min_version.setter
     def min_version(self, min_version: int):
+        if min_version is not None and not isinstance(min_version, int):
+            raise ValueError("min_version must be int")
+        if min_version > 772:
+            min_version = 722
+        if min_version < 769:
+            min_version = 769
         self.__min_version = min_version
 
 
@@ -128,6 +152,8 @@ class SSLContext():
     
     @matched_hostname.setter
     def matched_hostname(self, matched_hostname):
+        if matched_hostname is not None and not isinstance(matched_hostname, str):
+            raise ValueError("matched_hostname must be str")
         self.__matched_hostname = matched_hostname
 
     @property
@@ -138,4 +164,6 @@ class SSLContext():
     
     @named_curves.setter
     def named_curves(self, named_curves):
+        if named_curves is not None and not isinstance(named_curves, str):
+            raise ValueError("named_curves must be str")
         self.__named_curves = named_curves

@@ -1,4 +1,4 @@
-from pyarchernet import HttpStatusCode, HttpRequest, HttpResponse, BlockedHttpHandler, HttpServer, HttpClient, HttpClientResponse, SSLContext
+from pyarchernet import HttpStatusCode, HttpRequest, HttpResponse, BlockedHttpHandler, HttpServer, HttpClient, HttpClientResponse, SSLContext, Multipart, FormData
 
 import traceback
 
@@ -30,8 +30,23 @@ class MyHttp(BlockedHttpHandler):
 # print(res.status_msg)
 # print(str(res.content, encoding="UTF-8"))
 
-res = HttpClient.get("https://www.zhihu.com")
+# res = HttpClient.get("https://www.zhihu.com")
+c = ""
+with open('D:/da.csv', 'r', encoding='utf-8') as f:
+    c = f.read()
+multiparts = [Multipart('file', c, isFile=True, filename='data1029.csv', contentType="application/csv"), Multipart("Node-Id", 'alice')]
 
+bd = FormData.generateBoundary()
+body = FormData.generateMultipartBody(multiparts, bd)
 
+FormData.parseBodyToMultiparts(body, bd)
+
+res = HttpClient.post('http://10.32.122.172:32614/api/v1alpha1/data/upload', {'User-Token': '16fa3b5d0cf1422589909b282328ea0a', 'Content-Type': Multipart.MULTIPART_HEADER_PREFIX + bd}, body)
+
+# res = HttpClient.post('http://127.0.0.1:9607/api/v1alpha1/data/upload', {'User-Token': '16fa3b5d0cf1422589909b282328ea0a', 'Content-Type': Multipart.MULTIPART_HEADER_PREFIX + bd}, body)
+
+# res = HttpClient.post('http://10.32.122.172:32614/api/v1alpha1/p2p/project/list', {'User-Token': '16fa3b5d0cf1422589909b282328ea0a', 'Content-Type': "application/json"}, None)
+
+# res = HttpClient.get("https://www.zhihu.com")
 print(res.status_msg)
 print(str(res.content, encoding="UTF-8"))

@@ -19,6 +19,12 @@ class ServerChannel:
 
     def __init__(self, host="127.0.0.1", port=9617, thread_num=1, sslctx: SSLContext = None, handlerlist:HandlerList = None):
         self.__check(host, port)
+        if thread_num is None or not isinstance(thread_num, int):
+            raise ValueError("thread_num must be int")
+        if sslctx is not None and not isinstance(sslctx, SSLContext):
+            raise ValueError("sslctx must be SSLContext")
+        if handlerlist is not None and not isinstance(handlerlist, HandlerList):
+            raise ValueError("handlerlist must be HandlerList")
         self.__host = host
         self.__port = port
         if thread_num > 128:
@@ -74,6 +80,8 @@ class ServerChannel:
         return self.__handler_list
     
     def set_handlerlist(self, handlerlist:HandlerList):
+        if handlerlist is not None and not isinstance(handlerlist, HandlerList):
+            raise ValueError("handlerlist must be HandlerList")
         self.__handler_list = handlerlist
 
     def listen(self):
@@ -96,6 +104,8 @@ class ServerChannel:
         c_port = ctypes.c_int(self.port)
         c_thread = ctypes.c_int(self.__thread_num)
         if self.sslctx is not None:
+            if self.sslctx.max_version < self.sslctx.min_version:
+                self.sslctx.min_version = self.sslctx.max_version
             c_max_ver = ctypes.c_int32(self.sslctx.max_version)
             c_min_ver = ctypes.c_int32(self.sslctx.max_version)
             c_ssl = ctypes.c_int(1)
