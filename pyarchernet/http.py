@@ -681,7 +681,7 @@ class HttpClientResponse():
             return 
         title = str(lines[0], 'utf-8').strip()
         ts = title.split(' ')
-        if len(ts) < 2 or len(ts) > 3:
+        if len(ts) < 2:
             self.__ok = False
             self.__ex = HttpError(502, "Invalid Http Response. Bad Head " + title)
             return 
@@ -692,10 +692,10 @@ class HttpClientResponse():
             self.__ok = False
             self.__ex = HttpError(502, "Invalid Http Response. Bad Status Code {}".format(ts[1].strip()))
             return 
-        if len(ts) == 3:
-            self.__status_msg = "{} {}".format(self.__status_code, ts[2].strip())
-        else:
+        if len(ts) == 2:
             self.__status_msg = "{} {}".format(self.__status_code, _status_to_statusmessage(self.__status_code))
+        else:
+            self.__status_msg = "{} {}".format(self.__status_code, ' '.join(ts[2:]).strip())
         idx = 0
         for i in range(1, count):
             line = str(lines[i], 'utf-8').strip()
