@@ -37,3 +37,35 @@ class MyHttpHandler(BlockedHttpHandler):
 server = HttpServer(2)  
 server.listen("127.0.0.1", 8080, MyHttpHandler())  
 ```
+gmssl examples 
+``` python
+from pyarchernet import SSLContext 
+
+sm2_ca = ''
+sm2_crt = ''
+sm2_key = ''
+sm2_encrypted_crt = ''
+sm2_encrypted_key = ''
+
+with open('sm2_ca.crt', 'r') as f:
+  sm2_ca = f.read()
+
+with open('sm2_crt.crt', 'r') as f:
+  sm2_crt = f.read()
+
+with open('sm2_key.crt', 'r') as f:
+  sm2_key = f.read()
+
+with open('sm2_encrypted_crt.crt', 'r') as f:
+  sm2_encrypted_crt = f.read()
+
+with open('sm2_encrypted_key.crt', 'r') as f:
+  sm2_encrypted_key = f.read()
+
+ssl_ctx = SSLContext(is_client_mode=True)
+ssl_ctx.ca = sm2_ca
+ssl_ctx.crt = sm2_crt
+ssl_ctx.key = sm2_key
+ssl_ctx.en_crt = sm2_encrypted_crt
+ssl_ctx.en_key = sm2_encrypted_key
+```
