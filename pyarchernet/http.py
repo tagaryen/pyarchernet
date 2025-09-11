@@ -5,7 +5,8 @@ from .unordered_map import UnorderedMap
 from .server_channel import ServerChannel
 
 from urllib.parse import unquote
-import threading
+import threading, os, mimetypes
+from typing import Callable, List, Generator
 from abc import abstractmethod
 from datetime import datetime
 import random
@@ -157,45 +158,97 @@ class Multipart():
         self.isFile = isFile
         self.filename = filename
         self.contentType = contentType
-    
-    def toPartBody(self) -> str:
-        ret = "Content-Disposition: form-data; name=\"{}\"".format(self.name)
-        if self.isFile:
-            ret += "; filename=\"{}\"\r\n".format(self.filename)
-            ret += "Content-Type: {}\r\n\r\n{}\r\n".format(self.contentType, self.value)
-        else:
-            ret +=  "\r\n\r\n{}\r\n".format(self.value)
-        
-        return ret
 
 class FormData():
-    @staticmethod
-    def generateBoundary() -> str:
+    def __init__(self):
+        self.boundary = self.generateBoundary()
+        self.multiparts: List[Multipart] = []
+
+    def generateBoundary(self) -> str:
         s = ''
         for i in range(0, 24):
             s += str(random.randint(0, 9))
         return "--------------------------" + s
+    
+    def put(self, key: str, val: str):
+        self.multiparts.append(Multipart(key, val))
+    
+    
+    def put_file(self, key: str, filepath: str):
+        if not os.path.exists(filepath):
+            raise FileExistsError("file {} not found".format(filepath))
+        c_type, _ = mimetypes.guess_type(filepath)
+        self.multiparts.append(Multipart(key, filepath, True, os.path.basename(filepath), c_type))
+    
+    def calculate_multipart_length(self):
+        bd = "--{}".format(self.boundary)
+        ret = 0
+        for m in self.multiparts:
+            ret += len(bytes("{}\r\n".format(bd), encoding='utf-8'))
+            ret += len(bytes("Content-Disposition: form-data; name=\"{}\"".format(m.name), encoding='utf-8'))
+            if m.isFile:
+                ret += len(bytes("; filename=\"{}\"\r\n".format(m.filename), encoding='utf-8'))
+                ret += len(bytes("Content-Type: {}\r\n\r\n".format(m.contentType), encoding='utf-8'))
+                stat = os.stat(m.value)
+                ret += stat.st_size + 2
+            else:
+                ret +=  len(bytes("\r\n\r\n{}\r\n".format(m.value), encoding='utf-8'))
+        ret += len(bytes("{}--".format(bd), encoding='utf-8'))
+        return ret
 
-    @staticmethod
-    def generateMultipartBody(multiparts: list[Multipart], boundary: str) -> bytes:
-        if not isinstance(multiparts, list):
-            raise ValueError("multiparts must be list[Multipart]")
-        if not isinstance(boundary, str):
-            raise ValueError("boundary must be string")
-        bd = "--{}".format(boundary)
-        ret = ""
-        for m in multiparts:
-            ret += "{}\r\n{}".format(bd, m.toPartBody())
-        ret += "{}--".format(bd)
-        return bytes(ret, 'utf-8')
+
+    def generate_multipart_body(self):
+        bd = "--{}".format(self.boundary)
+        ret = b''
+        for m in self.multiparts:
+            ret += bytes("{}\r\n".format(bd), encoding='utf-8')
+            ret += bytes("Content-Disposition: form-data; name=\"{}\"".format(m.name), encoding='utf-8')
+            if m.isFile:
+                with open(m.value, 'rb') as f:
+                    value = f.read()
+                    ret += bytes("; filename=\"{}\"\r\n".format(m.filename), encoding='utf-8')
+                    ret += bytes("Content-Type: {}\r\n\r\n".format(m.contentType), encoding='utf-8')
+                    ret += value + b'\r\n'
+            else:
+                ret +=  bytes("\r\n\r\n{}\r\n".format(m.value), encoding='utf-8')
+        ret += bytes("{}--".format(bd), encoding='utf-8')
+        return ret
+
+    def generate_stream_body(self) -> Generator[bytes, None, None]:
+        bd = "--{}".format(self.boundary)
+        ret, off = b"", 0
+        cache_size = 4 * 1024
+        for m in self.multiparts:
+            off = 0
+            ret += bytes("{}\r\n".format(bd), encoding='utf-8')
+            ret += bytes("Content-Disposition: form-data; name=\"{}\"".format(m.name), encoding='utf-8')
+            if m.isFile:
+                ret += bytes("; filename=\"{}\"\r\nContent-Type: {}\r\n\r\n".format(m.filename, m.contentType), encoding='utf-8')
+                stat = os.stat(m.value)
+                with open(m.value, 'rb') as f:
+                    while stat.st_size - off > cache_size - len(ret):
+                        value = f.read(cache_size - len(ret))
+                        off += cache_size - len(ret)
+                        ret += value
+                        yield ret
+                        ret = b""
+                    value = f.read(stat.st_size - off)
+                    ret += value + b"\r\n"
+            else:
+                ret +=  bytes("\r\n\r\n{}\r\n".format(m.value), encoding='utf-8')
+            if len(ret) > cache_size:
+                yield ret
+                ret = b''
+        ret += bytes("{}--".format(bd), encoding='utf-8')
+        yield ret
     
     @staticmethod
-    def parseBodyToMultiparts(body: bytes, boundary: str) -> list[Multipart]:
+    def parse_body_to_multiparts(body: bytes, boundary: str) -> list[Multipart]:
         if not isinstance(body, bytes):
             raise ValueError("body must be bytes")
         if not isinstance(boundary, str):
             raise ValueError("boundary must be string")
-        bd = bytes("--" + boundary, 'utf-8')
+        bd = bytes("--" + boundary, encoding='utf-8')
         s, e = bd + b"\r\n", bd + b"--"
         if not body.startswith(s) or not body.endswith(e):
             if not body.endswith(e):
@@ -818,23 +871,49 @@ class _HttpClientHandler(Handler):
     def __init__(self, req_text: bytes, res: HttpClientResponse):
         self.req_text = req_text
         self.res = res
-        super().__init__()
+        self.stream = False
+        self.onresponse:Callable[[HttpClientResponse], None] = None
+        self.onchunk:Callable[[bytes], None] = None
+        self.formdata: FormData = None
     
+    def set_stream(self, onresponse: Callable[[HttpClientResponse], None] = None, onchunk: Callable[[bytes], None] = None):
+        self.stream = True
+        self.onresponse = onresponse
+        self.onchunk = onchunk
+
+    def set_formdata(self, formdata: FormData):
+        self.formdata = formdata
+
     def on_connect(self, ctx: ChannelContext):
         ctx.to_prev_handler_on_write(self.req_text)
+        if self.formdata:
+            for chunk in self.formdata.generate_stream_body():
+                ctx.to_prev_handler_on_write(chunk)
 
     def on_read(self, ctx: ChannelContext, data: bytes):
         try:
             if not self.res.headparsed:
                 self.res._HttpClientResponse__parse_head(data)
+                if self.stream:
+                    if self.onresponse:
+                        self.onresponse(self.res)
+                    if self.onchunk and len(self.res.content) > 0:
+                        self.onchunk(self.res.content)
+                    self.res._HttpClientResponse__content = b''
             else:
                 self.res._HttpClientResponse__parse_content(data)
+                if self.stream:
+                    if self.onchunk and len(self.res.content) > 0:
+                        self.onchunk(self.res.content)
+                    self.res._HttpClientResponse__content = b''
             if not self.res.ok:
                 self.on_finish(ctx)
             if self.res.finished:
                 self.on_finish(ctx)
         except Exception as e:
-            self.on_error(ctx, e)
+            if self.res._HttpClientResponse__ex is None:
+                self.res._HttpClientResponse__ex = e
+            ctx.close()
         
         
     def on_error(self, ctx: ChannelContext, e: Exception):
@@ -844,30 +923,8 @@ class _HttpClientHandler(Handler):
     def on_finish(self, ctx: ChannelContext):
         ctx.close()
 
-class HttpClient():
-    
-    @staticmethod
-    def get(url: str, headers: dict[str:str] = {}, ssl_ctx: SSLContext = None) -> HttpClientResponse:
-        return HttpClient.request("GET", url, headers=headers, ssl_ctx=ssl_ctx)
-        
-    @staticmethod
-    def post(url: str, headers: dict[str:str] = {}, body: bytes = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
-        return HttpClient.request("POST", url, headers=headers, body=body, ssl_ctx=ssl_ctx)
-    
-    @staticmethod
-    def put(url: str, headers: dict[str:str] = {}, body: bytes = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
-        return HttpClient.request("PUT", url, headers=headers, body=body, ssl_ctx=ssl_ctx)
-    
-    @staticmethod
-    def delete(url: str, headers: dict[str:str] = {}, body: bytes = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
-        return HttpClient.request("DELETE", url, headers=headers, body=body, ssl_ctx=ssl_ctx)
-    
-    @staticmethod
-    def option(url: str, headers: dict[str:str] = {}, body: bytes = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
-        return HttpClient.request("OPTION", url, headers=headers, body=body, ssl_ctx=ssl_ctx)
-    
-    @staticmethod
-    def request(method: str, url: str, headers: dict = {}, body: bytes = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
+class HttpReq():
+    def __init__(self, method: str, url: str, headers: dict = {}, body: bytes = None, ssl_ctx: SSLContext = None):
         methods = ["GET", "POST", "PUT", "DELETE", "OPTION"]
         if method not in methods:
             raise ValueError("Invalid method " + url)
@@ -901,17 +958,6 @@ class HttpClient():
         content = "{} {} HTTP/1.1{}".format(method, uri, _LRN)
 
         newheaders = {}
-        
-        if "content-type" not in newheaders:
-            newheaders["content-type"] = "application/x-www-form-urlencoded"
-        if "accept" not in newheaders:
-            newheaders["accept"] = "text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2"
-        if body is not None:
-            newheaders["content-length"] = "{}".format(len(body))
-        else:
-            newheaders["content-length"] = "0"
-        if "content-encoding" not in newheaders:
-            newheaders["content-encoding"] = "utf-8"
 
         if headers is not None:
             if not isinstance(headers, dict):
@@ -919,17 +965,24 @@ class HttpClient():
             for k, v in headers.items():
                 newheaders["{}".format(k).strip().lower()] = "{}".format(v).strip()
 
+        if "content-type" not in newheaders:
+            newheaders["content-type"] = "application/x-www-form-urlencoded"
+        if "accept" not in newheaders:
+            newheaders["accept"] = "text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2"
+        if body is not None and "content-length" not in newheaders:
+            newheaders["content-length"] = "{}".format(len(body))
+        if "content-encoding" not in newheaders:
+            newheaders["content-encoding"] = "utf-8"
         
         content += "host: {}:{}{}".format(host, port, _LRN)
         if "user-agent" in newheaders:
-            content += "user-agent: {}".format(newheaders["user-agent"], _LRN)
+            content += "user-agent: {}{}".format(newheaders["user-agent"], _LRN)
         else:
             content += "user-agent: Archer-Net_Python/1.10{}".format(_LRN)
         if "connection" in newheaders:
             content += "connection: {}{}".format(newheaders["connection"], _LRN)
         else:
             content += "connection: close{}".format(_LRN)
-
         for k,v in newheaders.items():
             content += "{}: {}{}".format(k, v, _LRN)
         
@@ -949,11 +1002,76 @@ class HttpClient():
                 ctx = ssl_ctx
         else:
             ctx = None
-        ch = Channel(host, port, sslctx = ctx, handlerlist=handlerlist)
+
+        self.host = host
+        self.port = port
+        self.content = content
+        self.encoding = encoding
+        self.handler = handler
+        self.handlerlist = handlerlist
+        self.res = res
+        self.ssl = ssl
+        self.ctx = ctx
+
+class HttpClient():
+    
+    @staticmethod
+    def get(url: str, headers: dict[str:str] = {}, ssl_ctx: SSLContext = None) -> HttpClientResponse:
+        return HttpClient.request("GET", url, headers=headers, ssl_ctx=ssl_ctx)
+        
+    @staticmethod
+    def post(url: str, headers: dict[str:str] = {}, body: bytes | FormData = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
+        return HttpClient.request("POST", url, headers=headers, body=body, ssl_ctx=ssl_ctx)
+    
+    @staticmethod
+    def put(url: str, headers: dict[str:str] = {}, body: bytes | FormData = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
+        return HttpClient.request("PUT", url, headers=headers, body=body, ssl_ctx=ssl_ctx)
+    
+    @staticmethod
+    def delete(url: str, headers: dict[str:str] = {}, body: bytes | FormData = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
+        return HttpClient.request("DELETE", url, headers=headers, body=body, ssl_ctx=ssl_ctx)
+    
+    @staticmethod
+    def option(url: str, headers: dict[str:str] = {}, body: bytes | FormData = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
+        return HttpClient.request("OPTION", url, headers=headers, body=body, ssl_ctx=ssl_ctx)
+
+    @staticmethod
+    def request(method: str, url: str, headers: dict = {}, body: bytes | FormData = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
+        if body is not None and isinstance(body, FormData):
+            if headers is None:
+                headers = {}
+            headers["content-type"] = Multipart.MULTIPART_HEADER_PREFIX + body.boundary
+            headers["content-length"] = str(body.calculate_multipart_length())
+            req = HttpReq(method, url, headers, None, ssl_ctx)
+            req.handler.set_formdata(body)
+        else:
+            req = HttpReq(method, url, headers, body, ssl_ctx)
+        
+        ch = Channel(req.host, req.port, sslctx = req.ctx, handlerlist=req.handlerlist)
         ch.connect()
 
-        res = handler.res
+        res = req.handler.res
         if res._HttpClientResponse__ex is not None or not res.ok:
             raise res._HttpClientResponse__ex
         
         return res
+    
+    @staticmethod
+    def stream_request(method: str, url: str, headers: dict = {}, body: bytes = None, ssl_ctx: SSLContext = None, onresponse: Callable[[HttpClientResponse], None] = None, onchunk: Callable[[bytes], None] = None):
+        if body is not None and isinstance(body, FormData):
+            if headers is None:
+                headers = {}
+            headers["content-type"] = Multipart.MULTIPART_HEADER_PREFIX + body.boundary
+            headers["content-length"] = str(body.calculate_multipart_length())
+            req = HttpReq(method, url, headers, None, ssl_ctx)
+            req.handler.set_formdata(body)
+        else:
+            req = HttpReq(method, url, headers, body, ssl_ctx)
+        
+        req.handler.set_stream(onresponse, onchunk)
+        ch = Channel(req.host, req.port, sslctx = req.ctx, handlerlist=req.handlerlist)
+        ch.connect()
+
+        res = req.handler.res
+        if res._HttpClientResponse__ex is not None or not res.ok:
+            raise res._HttpClientResponse__ex

@@ -135,11 +135,9 @@ class Handler:
 class BaseFrameHandler(Handler):
     
     __data_buf: dict
-    __key_lock: threading.Lock
 
     def __init__(self):
         self.__data_buf = {}
-        self.__key_lock = threading.Lock()
         super().__init__()
 
     def on_connect(self, ctx: ChannelContext):
@@ -152,17 +150,13 @@ class BaseFrameHandler(Handler):
         
         key = ctx.channel.host + str(ctx.channel.port)
 
-        with self.__key_lock:
-            if key not in self.__data_buf:
-                self.__data_buf[key] = {
-                    "lock": FairLock(),
-                    "length": -1,
-                    "buf": b''
-                }
-        self.__data_buf[key]["lock"].acquire()
+        if key not in self.__data_buf:
+            self.__data_buf[key] = {
+                "length": -1,
+                "buf": b''
+            }
         try:
             self.__data_buf[key]["buf"] = self.__data_buf[key]["buf"] + data
-            tot = len(self.__data_buf[key]["buf"])
             
             buf = self.__data_buf[key]["buf"]
             size = self.__data_buf[key]["length"]
@@ -186,8 +180,6 @@ class BaseFrameHandler(Handler):
             self.__data_buf[key]["buf"] = buf
         except Exception as e:
             self.on_error(ctx, e)
-        finally:
-            self.__data_buf[key]["lock"].release()
 
     def on_error(self, ctx: ChannelContext, e: Exception):
         ctx.to_next_handler_on_error(e)
