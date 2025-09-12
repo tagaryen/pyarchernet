@@ -2,18 +2,17 @@ from pyarchernet import HttpStatusCode, HttpRequest, HttpResponse, BlockedHttpHa
 
 import traceback
 
-class MyHttp(BlockedHttpHandler):
+# class MyHttp(BlockedHttpHandler):
 
-    def on_http_message(self, req: HttpRequest, res: HttpResponse):
-        res.set_content('{"nihao":"shuai"}')
+#     def on_http_message(self, req: HttpRequest, res: HttpResponse):
+#         res.set_content('{"nihao":"shuai"}')
 
-    def on_http_error(self, e: Exception):
-        traceback.print_exception(e)
+#     def on_http_error(self, e: Exception):
+#         traceback.print_exception(e)
 
 
-server = HttpServer(2)
-
-server.listen("127.0.0.1", 9607, MyHttp())
+# server = HttpServer(2)
+# server.listen("127.0.0.1", 9607, MyHttp())
 
 # ssl_ctx = SSLContext()
 # ssl_ctx.verify_peer = False
@@ -64,7 +63,7 @@ server.listen("127.0.0.1", 9607, MyHttp())
 #     file.write(str(chunk))
 
 
+res = HttpClient.post("http://127.0.0.1:9607/api/query", body = b"aksaokmcakmckamsckacmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm")
+print(str(res.content, 'utf-8'))
 # HttpClient.streamRequest("GET", "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js", onresponse=onresponse, onchunk=onchunkdata)
-
-# file.close()
 

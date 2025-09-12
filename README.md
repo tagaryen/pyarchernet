@@ -3,7 +3,7 @@ network framework based on c library, support latest openssl(gmssl) 1.3
 support encrypted key and encrypted certificate  
 ## install:   
 ``` cmd
-  pip install pyarchernet==1.2.6
+  pip install pyarchernet==1.2.7
 ``` 
 ## http(s) examples:  
 client:  

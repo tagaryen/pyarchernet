@@ -503,7 +503,7 @@ class HttpResponse():
         if code is None or not isinstance(code, int):
             raise ValueError("code must be int")
         self.__status_code = code
-        self.__status = code + " " + _status_to_statusmessage(code)
+        self.__status = str(code) + " " + _status_to_statusmessage(code)
 
     def set_header(self, key:str, val:str):
         if key is None or not isinstance(key, str):
