@@ -423,59 +423,40 @@ class HttpRequest():
         l = idx
         if l > 3:
             self.__headparsed = True
-        if l >= count - 1:
-            self.__cache = b'\n'.join(lines[l:])
+        else:
+            self.__ok = False
+            self.__err = "Bad Request. Bad Header " + line
             return 
         
-        remain = b'\n'.join(lines[l:])
         if "content-length" in self.__headers:
             try:
                 self.__content_length = int(self.__headers["content-length"])
             except ValueError as r:
                 self.__ok = False
                 self.__err = "Bad Request. Bad Content-Length: " + self.__headers["content-length"]
-                return 
-            if len(remain) >= self.__content_length:
-                self.__content = remain[0:self.__content_length]
-                self.__finished = True
-            else:
-                self.__content = remain
+                return
 
         elif "transfer-encoding" in self.__headers and 'chunked' == self.__headers["transfer-encoding"]:
             self.__chunked = True
-            while True:
-                c = len(remain)
-                lf = remain.find(b'\n')
-                if lf <= 0:
-                    self.__cache = remain
-                    return 
-                chunked_len = int(remain[0:lf].strip(), 16)
-                if chunked_len == 0:
-                    self.__finished = True
-                    return
-                if c < chunked_len+lf+1:
-                    self.__cache = remain
-                    return 
-                else:
-                    self.__content += remain[lf+1: lf+1+chunked_len]
-                    if c == chunked_len+lf+1:
-                        return 
-                    remain = remain[lf+1+chunked_len:]
-                    if remain[0] == 13:
-                        remain = remain[1:]
-                    if remain[0] == 10:
-                        remain = remain[1:]
         else:
             self.__content_length = 0
             self.__chunked = False
-            return 
+
+        if not self.__chunked and self.__content_length == 0:
+            self.__finished = True
+        elif self.__content_length > 0 and len(self.__content) > self.__content_length:
+            self.__finished = True
+
+        if not self.__finished:
+            remain = b''.join(lines[l:])
+            self.__parse_content(remain)
     
     def __parse_content(self, text:bytes):
         if self.__chunked:
             text = self.__cache + text
             self.__cache = b''
             while True:
-                lf = text.find('\n')
+                lf = text.find(b'\n')
                 if lf <= 0:
                     self.__cache = text
                     return 
@@ -494,6 +475,9 @@ class HttpRequest():
                     if text[0] == 10:
                         text = text[1:]
         else:
+            if self.__content_length <= 0:
+                self.finished = True
+                return 
             exists_len = len(self.__content)
             need_len = self.__content_length - exists_len
             if len(text) >= need_len:
@@ -586,10 +570,11 @@ class BlockedHttpHandler(Handler):
             res._HttpResponse__version = req._HttpRequest__version
             if req.finished:
                 self.on_http_message(req, res)
-        
-        ctx.to_prev_handler_on_write(res._HttpResponse__to_channel_bytes())
-
-        self.__reset_http_request(ctx)
+                ctx.to_prev_handler_on_write(res._HttpResponse__to_channel_bytes())
+                if req.version == 'HTTP/1.0':
+                    ctx.close()
+                    return 
+                self.__reset_http_request(ctx)
         
         
     def on_error(self, ctx: ChannelContext, e: Exception):
@@ -766,60 +751,33 @@ class HttpClientResponse():
         l = idx
         if l > 3:
             self.__headparsed = True
+        else:
+            self.__ok = False
+            self.__ex = HttpError(502, "Bad Request. Bad Header " + line)
+            return 
         
         if "content-length" in self.__headers:
             try:
                 self.__content_length = int(self.__headers["content-length"])
             except ValueError as r:
                 self.__ok = False
-                self.__err = "Bad Request. Bad Content-Length: " + self.__headers["content-length"]
-                return 
-            if l >= count - 1:
-                if self.__content_length <= 0:
-                    self.__finished = True
-                return 
-            
-            remain = b'\n'.join(lines[l:])
-            if len(remain) >= self.__content_length:
-                self.__content = remain[0:self.__content_length]
-                self.__finished = True
-            else:
-                self.__content = remain
-            
-            if self.__content_length <= 0 or len(self.__content) >= self.__content_length:
-                self.__finished = True
+                self.__ex = HttpError(502, "Bad Request. Bad Content-Length: " + self.__headers["content-length"])
+                return
 
         elif "transfer-encoding" in self.__headers and 'chunked' == self.__headers["transfer-encoding"]:
             self.__chunked = True
-            if l >= count - 1:
-                return 
-            
-            remain = b'\n'.join(lines[l:])
-            while True:
-                c = len(remain)
-                lf = remain.find(b'\n')
-                if lf <= 0:
-                    self.__cache = remain
-                    return 
-                chunked_len = int(remain[0:lf].strip(), 16)
-                if chunked_len == 0:
-                    self.__finished = True
-                    return
-                if c < chunked_len + lf + 1:
-                    self.__cache = remain
-                    return 
-                else:
-                    self.__content += remain[lf+1: lf+1+chunked_len]
-                    if lf+1+chunked_len == c:
-                        return 
-                    remain = remain[lf+1+chunked_len:]
-                    if remain[0] == 13:
-                        remain = remain[1:]
-                    if remain[0] == 10:
-                        remain = remain[1:]
         else:
             self.__content_length = 0
             self.__chunked = False
+
+        if not self.__chunked and self.__content_length == 0:
+            self.__finished = True
+        elif self.__content_length > 0 and len(self.__content) > self.__content_length:
+            self.__finished = True
+        
+        if not self.__finished:
+            remain = b''.join(lines[l:])
+            self.__parse_content(remain)
     
     def __parse_content(self, text:bytes):
         if len(text) <= 0:

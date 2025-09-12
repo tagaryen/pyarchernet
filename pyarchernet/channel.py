@@ -246,7 +246,5 @@ class Channel():
 
     
     def close(self):
-        if not self.__client_mode:
-            return 
         c_fd = ctypes.c_int64(self.__fd)
         ARCHERLIB.ARCHER_channel_close(c_fd)
