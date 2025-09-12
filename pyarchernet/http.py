@@ -466,8 +466,8 @@ class HttpRequest():
                     if remain[0] == 10:
                         remain = remain[1:]
         else:
-            self.__ok = False
-            self.__err = "Bad Request. Unknown content"
+            self.__content_length = 0
+            self.__chunked = False
             return 
     
     def __parse_content(self, text:bytes):
@@ -818,9 +818,8 @@ class HttpClientResponse():
                     if remain[0] == 10:
                         remain = remain[1:]
         else:
-            self.__ok = False
-            self.__ex = HttpError(502, "Bad Request. Unknown content")
-            return 
+            self.__content_length = 0
+            self.__chunked = False
     
     def __parse_content(self, text:bytes):
         if len(text) <= 0:
