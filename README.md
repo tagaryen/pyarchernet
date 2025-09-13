@@ -3,7 +3,7 @@ network framework based on c library, support latest openssl(gmssl) 1.3
 support encrypted key and encrypted certificate  
 ## install:   
 ``` cmd
-  pip install pyarchernet==1.2.7
+  pip install pyarchernet==1.2.8
 ``` 
 ## http(s) examples:  
 client:  
@@ -28,8 +28,9 @@ import traceback
 class MyHttpHandler(BlockedHttpHandler):  
 
     def on_http_message(self, req: HttpRequest, res: HttpResponse):  
-        print("receive " + str(req.get_content(), 'utf-8'))  
-        res.set_content('{"nihao":"shuai"}')  
+        print("receive " + str(req.get_content(), 'utf-8')) 
+        res.set_header('content-type', 'application/json') 
+        res.send_content('{"nihao":"shuai"}')  
   
     def on_http_error(self, e: Exception):  
         traceback.print_exception(e)  

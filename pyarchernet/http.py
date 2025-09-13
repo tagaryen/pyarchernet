@@ -288,17 +288,25 @@ class FormData():
 
 class HttpRequest():
 
-    __host: str
-    __port: int
-    __content: bytes
-    __cache: bytes
-    __uri: str
-
     def __init__(self, ctx: ChannelContext):
         if ctx is None or not isinstance(ctx, ChannelContext):
             raise ValueError("ctx must be ChannelContext")
         self.__host = ctx.channel.host
         self.__port = ctx.channel.port
+        self.__method = "GET"
+        self.__version = "HTTP/1.1"
+        self.__uri = ""
+        self.__ok = True
+        self.__headparsed = False
+        self.__finished = False
+        self.__querys = {}
+        self.__headers = {}
+        self.__content_length = -1
+        self.__chunked = False
+        self.__content = b''
+        self.__cache = b''
+    
+    def __reset(self):
         self.__method = "GET"
         self.__version = "HTTP/1.1"
         self.__uri = ""
@@ -487,9 +495,33 @@ class HttpRequest():
             else:
                 self.__content += text
 
+class StreamWriter():
+    def __init__(self, encoding: str, ctx: ChannelContext):
+        self.__ctx = ctx
+        self.__encoding = encoding
+    
+    def write(self, chunk: str | bytes):
+        if not isinstance(chunk, bytes):
+            chunk = bytes(chunk, encoding = self.__encoding)
+        hex_num = '\r\n{}\r\n'.format(hex(len(chunk))[2:])
+        self.__ctx.to_prev_handler_on_write(bytes(hex_num, encoding='utf-8') + chunk)
+    
+    def end(self):
+        self.__ctx.to_prev_handler_on_write(b'\r\n0\r\n\r\n')
 
 class HttpResponse():
-    def __init__(self):
+    def __init__(self, ctx: ChannelContext):
+        self.__version = "HTTP/1.1"
+        self.__status_code = 200
+        self.__status = "200 OK"
+        self.__raw_headers = "Server: ArcherNet/Python\r\nConnection: close\r\n"
+        self.__headers = {}
+        self.__encoding = 'utf-8'
+        self.__content = None
+        self.__content_length = 0
+        self.__ctx = ctx
+
+    def __reset(self):
         self.__version = "HTTP/1.1"
         self.__status_code = 200
         self.__status = "200 OK"
@@ -522,7 +554,17 @@ class HttpResponse():
             raise ValueError("encodig must be str")
         self.__encoding = encodig
     
-    def set_content(self, content: str|bytes):
+    # def set_content(self, content: str|bytes):
+    #     if isinstance(content, str):
+    #         self.__content = bytes(content, encoding=self.__encoding)
+    #     elif isinstance(content, bytes):
+    #         self.__content = content
+    #     else:
+    #         raise ValueError("content must be str or bytes")
+    #     self.__content_length = len(self.__content)
+    #     self.__headers["content-length"] = self.__content_length
+
+    def send_content(self, content: str|bytes):
         if isinstance(content, str):
             self.__content = bytes(content, encoding=self.__encoding)
         elif isinstance(content, bytes):
@@ -531,6 +573,17 @@ class HttpResponse():
             raise ValueError("content must be str or bytes")
         self.__content_length = len(self.__content)
         self.__headers["content-length"] = self.__content_length
+        self.__ctx.to_prev_handler_on_write(self.__to_channel_bytes())
+    
+    def stream_writer(self) -> StreamWriter:
+        self.__headers["transfer-encoding"] = 'chunked'
+        self.__content_length = 0
+
+        if 'content-length' in self.__headers:
+            del self.__headers['content-length']
+        self.__ctx.to_prev_handler_on_write(self.__to_channel_bytes())
+
+        return StreamWriter(self.__encoding, self.__ctx)
 
     def __to_channel_bytes(self) -> bytes:
         res = self.__version + " " + self.__status + "\r\n" + self.__raw_headers
@@ -540,11 +593,10 @@ class HttpResponse():
             self.__headers['content-type'] = "text/html"
         for k, v in self.__headers.items():
             res += "{}: {}\r\n".format(k, v)
-        res += "\r\n"
         res = bytes(res, self.__encoding)
         
-        if self.__content is not None:
-            res += self.__content
+        if self.__content_length > 0 and self.__content is not None:
+            res += b'\r\n' + self.__content
         return res
 
     
@@ -570,14 +622,14 @@ class BlockedHttpHandler(Handler):
             res._HttpResponse__version = req._HttpRequest__version
             if req.finished:
                 self.on_http_message(req, res)
-                ctx.to_prev_handler_on_write(res._HttpResponse__to_channel_bytes())
                 if req.version == 'HTTP/1.0':
                     ctx.close()
-                    return 
-                self.__reset_http_request(ctx)
+                self.__reset(req, res)
         
         
     def on_error(self, ctx: ChannelContext, e: Exception):
+        with self.__map_lock:
+            self.__http_map.delete(ctx.channel.get_id())
         self.on_http_error(e)
     
     
@@ -593,6 +645,10 @@ class BlockedHttpHandler(Handler):
     def on_http_error(self, e: Exception):
         pass
 
+    def __reset(self, req: HttpRequest, res: HttpResponse):
+        res._HttpResponse__reset()
+        req._HttpRequest__reset()
+
     def __reset_http_request(self, ctx: ChannelContext):
         with self.__map_lock:
             self.__http_map.delete(ctx.channel.get_id())
@@ -602,7 +658,7 @@ class BlockedHttpHandler(Handler):
             pack = self.__http_map.get(ctx.channel.get_id())
             if pack is None:
                 req = HttpRequest(ctx)
-                res = HttpResponse()
+                res = HttpResponse(ctx)
                 pack = {"req":req, "res":res}
                 self.__http_map.put(ctx.channel.get_id(), pack)
             return pack["req"]
