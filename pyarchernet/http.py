@@ -13,6 +13,15 @@ import random
 
 _LRN = "\r\n"
 
+
+def _find_line(input: bytes):
+    n = input.find(b'\n')
+    if n < 0 or n > 16:
+        n = input.find(b'\r')
+    if n < 0 or n > 16:
+        return -1
+    return n
+
 class HttpError(RuntimeError):
     def __init__(self, *args):
         super().__init__(*args)
@@ -456,7 +465,7 @@ class HttpRequest():
             self.__finished = True
 
         if not self.__finished:
-            remain = b''.join(lines[l:])
+            remain = b'\r\n'.join(lines[l:])
             self.__parse_content(remain)
     
     def __parse_content(self, text:bytes):
@@ -464,20 +473,22 @@ class HttpRequest():
             text = self.__cache + text
             self.__cache = b''
             while True:
-                lf = text.find(b'\n')
+                lf = text.find(b'\r\n')
                 if lf <= 0:
                     self.__cache = text
                     return 
+                
                 chunked_len = int(text[0:lf].strip(), 16)
                 if chunked_len == 0:
                     self.__finished = True
                     return
-                if len(text[lf+1:]) < chunked_len:
+                end = lf+2
+                if len(text[end:]) < chunked_len:
                     self.__cache = text
                     return 
                 else:
-                    self.__content += text[lf+1: lf+1+chunked_len]
-                    text = text[lf+1+chunked_len:]
+                    self.__content += text[end: end+chunked_len]
+                    text = text[end+chunked_len:]
                     if text[0] == 13:
                         text = text[1:]
                     if text[0] == 10:
@@ -767,7 +778,7 @@ class HttpClientResponse():
         return self.__headers
 
     def __parse_head(self, text: bytes):
-        lines = text.split(b'\n')
+        lines = text.split(b'\r\n')
         count = len(lines)
         if count < 3:
             self.__ok = False
@@ -832,7 +843,7 @@ class HttpClientResponse():
             self.__finished = True
         
         if not self.__finished:
-            remain = b''.join(lines[l:])
+            remain = b'\r\n'.join(lines[l:])
             self.__parse_content(remain)
     
     def __parse_content(self, text:bytes):
@@ -843,23 +854,24 @@ class HttpClientResponse():
             self.__cache = b''
             c = len(text)
             while c > 0:
-                lf = text.find(b'\n')
+                lf = text.find(b'\r\n')
                 if lf <= 0:
                     self.__cache = text
                     return 
                 if lf == 1:
                     text = text[1:]
                     continue
+                end = lf + 2
                 chunked_len = int(text[0:lf].strip(), 16)
                 if chunked_len == 0:
                     self.__finished = True
                     return
-                if c < chunked_len+lf+1:
+                if c < chunked_len+end:
                     self.__cache = text
                     return 
                 else:
-                    self.__content += text[lf+1: lf+1+chunked_len]
-                    text = text[lf+1+chunked_len:]
+                    self.__content += text[end: end+chunked_len]
+                    text = text[end+chunked_len:]
                     if len(text) <= 0:
                         return 
                     if text[0] == 13:

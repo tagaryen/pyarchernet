@@ -3,28 +3,28 @@ from pyarchernet import HttpStatusCode, HttpRequest, HttpResponse, BlockedHttpHa
 import traceback
 
 
-a = {
-    'a': 12312324,
-    'b': 12423424
-}
+# a = {
+#     'a': 12312324,
+#     'b': 12423424
+# }
 
-del a['a']
+# del a['a']
 
-class MyHttp(BlockedHttpHandler):
+# class MyHttp(BlockedHttpHandler):
 
-    def on_http_message(self, req: HttpRequest, res: HttpResponse):
-        res.set_header('content-type', 'text/plain')
-        # res.send_content('{"nihao":"shuai"}')
-        writer = res.stream_writer()
-        writer.write('alksdlaaaaaaaaaaaaaaaaalllnasmmmmmmmmmmmmmmmmmmmmmmm')
-        writer.end()
+#     def on_http_message(self, req: HttpRequest, res: HttpResponse):
+#         res.set_header('content-type', 'text/plain')
+#         # res.send_content('{"nihao":"shuai"}')
+#         writer = res.stream_writer()
+#         writer.write('alksdlaaaaaaaaaaaaaaaaalllnasmmmmmmmmmmmmmmmmmmmmmmm')
+#         writer.end()
 
-    def on_http_error(self, e: Exception):
-        traceback.print_exception(e)
+#     def on_http_error(self, e: Exception):
+#         traceback.print_exception(e)
 
 
-server = HttpServer(2)
-server.listen("127.0.0.1", 9607, MyHttp())
+# server = HttpServer(2)
+# server.listen("127.0.0.1", 9607, MyHttp())
 
 # ssl_ctx = SSLContext()
 # ssl_ctx.verify_peer = False
@@ -75,7 +75,11 @@ server.listen("127.0.0.1", 9607, MyHttp())
 #     file.write(str(chunk))
 
 
-res = HttpClient.post("http://127.0.0.1:9607/api/query", body = b"aksaokmcakmckamsckacmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm")
-print(str(res.content, 'utf-8'))
+# res = HttpClient.post("http://127.0.0.1:9607/api/query", body = b"aksaokmcakmckamsckacmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm")
+# print(str(res.content, 'utf-8'))
 # HttpClient.streamRequest("GET", "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js", onresponse=onresponse, onchunk=onchunkdata)
 
+
+res = HttpClient.get("https://www.aliyun.com")
+# res = HttpClient.get("https://www.baidu.com")
+print(str(res.content))
