@@ -1,4 +1,4 @@
-from pyarchernet import ARPCClient, ARPCServer, AbstractUrlMatcher, SSLContext
+from archernet import ARPCClient, ARPCServer, AbstractUrlMatcher, SSLContext
 import threading
 import time
 import io
