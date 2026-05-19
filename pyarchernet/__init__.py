@@ -20,9 +20,11 @@ from .handlers import Handler, BaseFrameHandler, ChannelContext, HandlerList
 from .fair_lock import FairLock
 from .arpc import ARPCClient, ARPCServer, AbstractUrlMatcher
 from .http import HttpRequest, HttpResponse, HttpServer, HttpStatusCode, BlockedHttpHandler, HttpClient, HttpClientResponse, HttpError, Multipart, FormData, StreamWriter
+from .rs_client import RSClient
 
 __all__ = ['Channel', 'ServerChannel', 'SSLContext','Handler', 'ChannelContext','HandlerList', 'BaseFrameHandler', 'FairLock', 
            'AbstractUrlMatcher', 'ARPCClient', 'ARPCServer',
-           'HttpRequest', 'HttpResponse', 'HttpServer', 'HttpStatusCode', 'BlockedHttpHandler', 'HttpClient', 'HttpClientResponse', 'HttpError', 'Multipart', 'FormData', 'StreamWriter']
+           'HttpRequest', 'HttpResponse', 'HttpServer', 'HttpStatusCode', 'BlockedHttpHandler', 'HttpClient', 'HttpClientResponse', 'HttpError', 'Multipart', 'FormData', 'StreamWriter',
+           'RSClient']
 
 

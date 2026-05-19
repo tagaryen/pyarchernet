@@ -10,13 +10,13 @@ from shutil import rmtree
 from setuptools import find_packages, setup, Command
 
 # Package meta-data.
-NAME = 'pyarchernet'
+NAME = 'archernet'
 DESCRIPTION = 'network framework based on c library'
 URL = 'https://github.com/tagaryen/pyarchernet'
 EMAIL = '2564928358@qq.com'
 AUTHOR = 'Archer'
 REQUIRES_PYTHON = '>=3.6.0'
-VERSION = '1.2.9'
+VERSION = '1.3.0'
 
 # What packages are required for this module to be executed?
 REQUIRED = []

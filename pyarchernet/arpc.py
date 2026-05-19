@@ -1,5 +1,5 @@
-import json, traceback, threading, time, os
-from typing import Any, Callable
+import json, traceback, threading, time
+from typing import Callable
 from abc import abstractmethod
 from .handlers import Handler, BaseFrameHandler, ChannelContext, NetError, HandlerList
 from .channel import Channel

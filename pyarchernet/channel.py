@@ -27,10 +27,7 @@ class Channel():
         self.__port = port
         self.__fd = 0
         self.__client_mode = client_mode
-        if client_mode:
-            self.__active = True
-        else:
-            self.__active = False
+        self.__active = False
         if sslctx is not None and not sslctx.is_client_mode:
             raise NetError("can not use a server-side SSLContext at client side")
         self.__sslctx = sslctx
