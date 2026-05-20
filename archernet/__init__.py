@@ -1,4 +1,4 @@
-__package__ = "pyarchernet"
+__package__ = "archernet"
 
 import ctypes, os
 import platform

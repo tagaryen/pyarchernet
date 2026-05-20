@@ -1,4 +1,4 @@
-# pyarchernet
+# archernet
 network framework based on c library, support latest openssl(gmssl) 1.3 
 support encrypted key and encrypted certificate  
 ## install:   
@@ -8,7 +8,7 @@ support encrypted key and encrypted certificate
 ## http(s) examples:  
 client:  
 ``` python
-from pyarchernet import HttpStatusCode, HttpClient, HttpClientResponse, SSLContext
+from archernet import HttpStatusCode, HttpClient, HttpClientResponse, SSLContext
 
 res = HttpClient.get("https://www.zhihu.com")  
 print(res.status_msg)  
@@ -21,7 +21,7 @@ print(str(res.content, encoding="UTF-8"))
 
 server:  
 ``` python
-from pyarchernet import HttpStatusCode, HttpRequest, HttpResponse, BlockedHttpHandler, HttpServer, SSLContext  
+from archernet import HttpStatusCode, HttpRequest, HttpResponse, BlockedHttpHandler, HttpServer, SSLContext  
 
 import traceback  
 
@@ -40,7 +40,7 @@ server.listen("127.0.0.1", 8080, MyHttpHandler())
 ```
 gmssl examples 
 ``` python
-from pyarchernet import SSLContext 
+from archernet import SSLContext 
 
 sm2_ca = ''
 sm2_crt = ''
