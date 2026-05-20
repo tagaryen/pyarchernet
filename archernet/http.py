@@ -6,7 +6,7 @@ from .server_channel import ServerChannel
 
 from urllib.parse import unquote
 import threading, os, mimetypes
-from typing import Callable, List, Generator
+from typing import Callable, List, Generator, Union
 from abc import abstractmethod
 from datetime import datetime
 import random
@@ -511,7 +511,7 @@ class StreamWriter():
         self.__ctx = ctx
         self.__encoding = encoding
     
-    def write(self, chunk: str | bytes):
+    def write(self, chunk: Union[bytes , str]):
         if not isinstance(chunk, bytes):
             chunk = bytes(chunk, encoding = self.__encoding)
         hex_num = '\r\n{}\r\n'.format(hex(len(chunk))[2:])
@@ -565,7 +565,7 @@ class HttpResponse():
             raise ValueError("encodig must be str")
         self.__encoding = encodig
     
-    # def set_content(self, content: str|bytes):
+    # def set_content(self, content: Union[bytes , str]):
     #     if isinstance(content, str):
     #         self.__content = bytes(content, encoding=self.__encoding)
     #     elif isinstance(content, bytes):
@@ -575,7 +575,7 @@ class HttpResponse():
     #     self.__content_length = len(self.__content)
     #     self.__headers["content-length"] = self.__content_length
 
-    def send_content(self, content: str|bytes):
+    def send_content(self, content: Union[bytes , str]):
         if isinstance(content, str):
             self.__content = bytes(content, encoding=self.__encoding)
         elif isinstance(content, bytes):
@@ -1045,23 +1045,23 @@ class HttpClient():
         return HttpClient.request("GET", url, headers=headers, ssl_ctx=ssl_ctx)
         
     @staticmethod
-    def post(url: str, headers: dict[str:str] = {}, body: bytes | FormData = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
+    def post(url: str, headers: dict[str:str] = {}, body: Union[bytes, FormData] = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
         return HttpClient.request("POST", url, headers=headers, body=body, ssl_ctx=ssl_ctx)
     
     @staticmethod
-    def put(url: str, headers: dict[str:str] = {}, body: bytes | FormData = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
+    def put(url: str, headers: dict[str:str] = {}, body: Union[bytes, FormData] = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
         return HttpClient.request("PUT", url, headers=headers, body=body, ssl_ctx=ssl_ctx)
     
     @staticmethod
-    def delete(url: str, headers: dict[str:str] = {}, body: bytes | FormData = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
+    def delete(url: str, headers: dict[str:str] = {}, body: Union[bytes, FormData] = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
         return HttpClient.request("DELETE", url, headers=headers, body=body, ssl_ctx=ssl_ctx)
     
     @staticmethod
-    def option(url: str, headers: dict[str:str] = {}, body: bytes | FormData = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
+    def option(url: str, headers: dict[str:str] = {}, body: Union[bytes, FormData] = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
         return HttpClient.request("OPTION", url, headers=headers, body=body, ssl_ctx=ssl_ctx)
 
     @staticmethod
-    def request(method: str, url: str, headers: dict = {}, body: bytes | FormData = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
+    def request(method: str, url: str, headers: dict = {}, body: Union[bytes, FormData] = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
         if body is not None and isinstance(body, FormData):
             if headers is None:
                 headers = {}

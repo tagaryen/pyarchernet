@@ -3,6 +3,7 @@ from .sslcontext import SSLContext
 from .handlers import NetError, HandlerList
 
 import ctypes, json, threading, traceback
+from typing import Union
 
 class Channel():
     __host: str
@@ -225,7 +226,7 @@ class Channel():
         return self.__fd + 65537
 
 
-    def send(self, data: bytes | str):
+    def send(self, data: Union[bytes , str]):
         data_bytes = None
         if isinstance(data, bytes):
             data_bytes = data

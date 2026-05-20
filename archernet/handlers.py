@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from typing import Union
 from .fair_lock import FairLock
 
 import threading, traceback, json
@@ -26,7 +27,7 @@ class ChannelContext:
         else:
             self.__handler.on_error(self, NetError(msg))
 
-    def __to_bytes(self, data: bytes| str):
+    def __to_bytes(self, data: Union[str, bytes]):
         data_bytes = None
         if isinstance(data, bytes):
             data_bytes = data
@@ -73,14 +74,14 @@ class ChannelContext:
             self.__error("can not found next handler")
         self.__next_ctx.handler.on_close(self.__next_ctx)
 
-    def to_prev_handler_on_write(self, data: bytes | str):
+    def to_prev_handler_on_write(self, data:Union[bytes , str]):
         data_bytes = self.__to_bytes(data)
         if self.__prev_ctx is None:
             self.__channel.send(data_bytes)
         else:
             self.__prev_ctx.handler.on_write(self.__prev_ctx, data_bytes)
 
-    def send(self, data: bytes | str):
+    def send(self, data: Union[bytes , str]):
         data_bytes = self.__to_bytes(data)
         self.__handler.on_write(data_bytes)
 
