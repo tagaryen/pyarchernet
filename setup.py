@@ -15,8 +15,8 @@ DESCRIPTION = 'network framework based on c library'
 URL = 'https://github.com/tagaryen/pyarchernet'
 EMAIL = '2564928358@qq.com'
 AUTHOR = 'Archer'
-REQUIRES_PYTHON = '>=3.6.0'
-VERSION = '1.3.3'
+REQUIRES_PYTHON = '>=3.6.8'
+VERSION = '1.3.4'
 
 # What packages are required for this module to be executed?
 REQUIRED = []

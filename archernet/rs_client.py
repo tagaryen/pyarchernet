@@ -1,9 +1,7 @@
-import json, traceback, threading, time, os
-from typing import Callable
-from abc import abstractmethod
+import traceback, threading, time, os
 from .handlers import Handler, BaseFrameHandler, ChannelContext, NetError, HandlerList
 from .channel import Channel
-from .sm4util import sm4_encrypt_ecb, sm4_decrypt_ecb
+from .sm4util import sm4_encrypt_ecb
 
 
 

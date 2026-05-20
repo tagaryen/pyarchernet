@@ -1,8 +1,7 @@
 from abc import abstractmethod
-from typing import Union
-from .fair_lock import FairLock
+from typing import Union, List
 
-import threading, traceback, json
+import traceback, json
 
 class NetError(RuntimeError):
     def __init__(self, *args):
@@ -196,7 +195,7 @@ class BaseFrameHandler(Handler):
 
 
 class HandlerList:
-    __handlers: list[Handler]
+    __handlers: List[Handler]
     __ctx_dict: dict
 
     def __init__(self):
@@ -221,7 +220,7 @@ class HandlerList:
         return head_ctx
 
     @property
-    def handlers(self) -> list[Handler]:
+    def handlers(self) -> List[Handler]:
         return self.__handlers
 
     def add_handler(self, handler: Handler):
