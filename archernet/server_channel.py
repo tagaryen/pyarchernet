@@ -195,7 +195,6 @@ class ServerChannel:
         def block_listen():
             ARCHERLIB.ARCHER_server_channel_listen.restype = ctypes.c_char_p
             ret = ARCHERLIB.ARCHER_server_channel_listen(c_fd, c_host, c_port, c_ssl, c_thread, c_ca, c_crt, c_key, c_en_crt, c_en_key, c_max_ver, c_min_ver, on_connect, on_read, on_error, on_close)
-            print("ret = {}".format(ret))
             if ret is not None and len(ret) > 0:
                 raise NetError(str(ret, 'utf-8'))
         
