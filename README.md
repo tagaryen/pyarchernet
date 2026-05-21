@@ -33,7 +33,7 @@ class MyHttpHandler(BlockedHttpHandler):
         res.send_content('{"nihao":"shuai"}')  
   
     def on_http_error(self, e: Exception):  
-        traceback.print_exception(e)  
+        format_exception(e)  
 
 server = HttpServer(2)  
 server.listen("127.0.0.1", 8080, MyHttpHandler())  

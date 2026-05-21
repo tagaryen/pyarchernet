@@ -405,6 +405,8 @@ class HttpRequest():
 
 
     def __parse_head(self, text: bytes):
+        print(text)
+        print("**********************")
         lines = text.splitlines(keepends=True)
         count = len(lines)
         if count < 3:
@@ -626,6 +628,9 @@ class BlockedHttpHandler(Handler):
             req._HttpRequest__parse_head(data)
         else:
             req._HttpRequest__parse_content(data)
+            
+        print("******"+str(req.ok)+"******")
+
         if not req.ok:
             res.set_status(HttpStatusCode.BAD_REQUEST)
             self.on_http_error(ValueError(req.__err))

@@ -1,10 +1,11 @@
-import json, traceback, threading, time
+import json, threading, time
 from typing import Callable, Dict
 from abc import abstractmethod
 from .handlers import Handler, BaseFrameHandler, ChannelContext, NetError, HandlerList
 from .channel import Channel
 from .server_channel import ServerChannel
 from .sslcontext import SSLContext
+from .exception import format_exception
 
 NOTFOUND = b'\0\0\0\0NOTFOUND'
 NOTFOUND_LEN = len(NOTFOUND)
@@ -42,7 +43,7 @@ class _ARPCHandler(Handler):
         if self.__ex_cb is not None:
             self.__ex_cb(e)
         else:
-            traceback.print_exception(e)
+            format_exception(e)
     
     def add_url_matcher(self, url: str, matcher: AbstractUrlMatcher):
         self.__url_map[url] = matcher

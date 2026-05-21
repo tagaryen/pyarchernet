@@ -3,8 +3,9 @@ from .channel import Channel
 from .handlers import NetError, HandlerList
 from .sslcontext import SSLContext
 from .unordered_map import UnorderedMap
+from .exception import format_exception
 
-import ctypes, threading, traceback, signal
+import ctypes, threading, signal
 
 class ServerChannel:
     # __SREVER_MAP = UnorderedMap()
@@ -139,7 +140,7 @@ class ServerChannel:
                     if ctx is not None:
                         ctx.handler.on_error(ctx, e)
                     else: 
-                        traceback.print_exception(e)
+                        format_exception(e)
 
         def server_on_read(fd: int, host: bytes, port: int, data_ptr: ctypes.c_void_p, data_size: int):
             if self.handlerlist is not None:
@@ -153,7 +154,7 @@ class ServerChannel:
                     if ctx is not None:
                         ctx.handler.on_error(ctx, e)
                     else: 
-                        traceback.print_exception(e)
+                        format_exception(e)
 
         def server_on_error(fd: int, host: bytes, port: int, error: bytes):
             if self.handlerlist is not None:
@@ -165,7 +166,7 @@ class ServerChannel:
                     else:
                         print("ERROR: {}".format(str(error, 'utf-8')))
                 except Exception as e:
-                    traceback.print_exception(e)
+                    format_exception(e)
 
         def server_on_close(fd: int, host: bytes, port: int):
             channel = self.__get_channel(fd, str(host, 'utf-8'), port)
@@ -178,7 +179,7 @@ class ServerChannel:
                     if ctx is not None:
                         ctx.handler.on_error(ctx, e)
                     else: 
-                        traceback.print_exception(e)
+                        format_exception(e)
 
         OnConnectCb = ctypes.CFUNCTYPE(None, ctypes.c_int64, ctypes.c_char_p, ctypes.c_int)
         on_connect = OnConnectCb(server_on_connect)

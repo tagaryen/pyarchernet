@@ -20,7 +20,7 @@ import traceback
 #         writer.end()
 
 #     def on_http_error(self, e: Exception):
-#         traceback.print_exception(e)
+#         format_exception(e)
 
 
 # server = HttpServer(2)

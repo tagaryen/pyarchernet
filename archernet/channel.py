@@ -1,8 +1,9 @@
 from . import ARCHERLIB
 from .sslcontext import SSLContext
 from .handlers import NetError, HandlerList
+from .exception import format_exception
 
-import ctypes, json, threading, traceback
+import ctypes, json, threading
 from typing import Union, Dict
 
 class Channel():
@@ -151,7 +152,7 @@ class Channel():
                     else:
                         print("ERROR: {}".format(str(error, 'utf-8')))
                 except Exception as e:
-                    traceback.print_exception(e)
+                    format_exception(e)
 
 
         def client_on_connect():
@@ -165,7 +166,7 @@ class Channel():
                     if ctx is not None:
                         ctx.handler.on_error(ctx, e)
                     else:
-                        traceback.print_exception(e)
+                        format_exception(e)
 
         def client_on_read(data_ptr: ctypes.c_void_p, data_size: int):
             if self.handlerlist is not None:
@@ -178,7 +179,7 @@ class Channel():
                     if ctx is not None:
                         ctx.handler.on_error(ctx, e)
                     else:
-                        traceback.print_exception(e)
+                        format_exception(e)
 
         def client_on_close():
             self.__active = False
@@ -191,7 +192,7 @@ class Channel():
                     if ctx is not None:
                         ctx.handler.on_error(ctx, e)
                     else:
-                        traceback.print_exception(e)
+                        format_exception(e)
 
 
         OnConnectCb = ctypes.CFUNCTYPE(None)

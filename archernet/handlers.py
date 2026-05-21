@@ -1,6 +1,8 @@
 from abc import abstractmethod
 from typing import Union, List, Dict
-import traceback, json
+import json
+
+from .exception import format_exception
 
 class NetError(RuntimeError):
     def __init__(self, *args):
@@ -63,7 +65,7 @@ class ChannelContext:
     
     def to_next_handler_on_error(self, e: Exception):
         if self.__next_ctx is None:
-            traceback.print_exception(e)
+            format_exception(e)
         else:
             self.__next_ctx.handler.on_error(self.__next_ctx, e)
     

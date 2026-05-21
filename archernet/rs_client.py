@@ -1,7 +1,8 @@
-import traceback, threading, time, os
+import threading, time, os
 from .handlers import Handler, BaseFrameHandler, ChannelContext, NetError, HandlerList
 from .channel import Channel
 from .sm4util import sm4_encrypt_ecb
+from .exception import format_exception
 
 
 
