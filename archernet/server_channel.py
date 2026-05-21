@@ -4,7 +4,7 @@ from .handlers import NetError, HandlerList
 from .sslcontext import SSLContext
 from .unordered_map import UnorderedMap
 
-import ctypes, threading, traceback
+import ctypes, threading, traceback, signal
 
 class ServerChannel:
     # __SREVER_MAP = UnorderedMap()
@@ -198,10 +198,21 @@ class ServerChannel:
             print("ret = {}".format(ret))
             if ret is not None and len(ret) > 0:
                 raise NetError(str(ret, 'utf-8'))
-            
+        
+        exit_event = threading.Event()
+
+        def signal_handler(signum, frame):
+            self.close()
+            exit_event.set()
+        
+        signal.signal(signal.SIGINT, signal_handler)
+
         if self.__is_async:
-            self.__thread = threading.Thread(target=block_listen)
-            self.__thread.start()
+            try:
+                self.__thread = threading.Thread(target=block_listen)
+                self.__thread.start()
+            except Exception:
+                pass
         else:
             block_listen()
 

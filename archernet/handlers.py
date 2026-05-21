@@ -1,6 +1,5 @@
 from abc import abstractmethod
 from typing import Union, List, Dict
-
 import traceback, json
 
 class NetError(RuntimeError):
@@ -197,7 +196,6 @@ class BaseFrameHandler(Handler):
 class HandlerList:
     __handlers: List[Handler]
     __ctx_dict: Dict
-
     def __init__(self):
         self.__handlers = []
         self.__ctx_dict = {}
