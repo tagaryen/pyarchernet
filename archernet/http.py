@@ -6,7 +6,7 @@ from .server_channel import ServerChannel
 
 from urllib.parse import unquote
 import threading, os, mimetypes
-from typing import Callable, List, Generator, Union
+from typing import Callable, List, Generator, Union, Dict
 from abc import abstractmethod
 from datetime import datetime
 import random
@@ -252,7 +252,7 @@ class FormData():
         yield ret
     
     @staticmethod
-    def parse_body_to_multiparts(body: bytes, boundary: str) -> list[Multipart]:
+    def parse_body_to_multiparts(body: bytes, boundary: str) -> List[Multipart]:
         if not isinstance(body, bytes):
             raise ValueError("body must be bytes")
         if not isinstance(boundary, str):
@@ -367,13 +367,13 @@ class HttpRequest():
     def get_query(self, key: str) -> str:
         return self.__querys[key]
 
-    def get_all_querys(self) -> dict[str]:
+    def get_all_querys(self) -> Dict[str, str]:
         return self.__querys
     
     def get_header(self, key:str) -> str:
         return self.__headers[key]
 
-    def get_all_headers(self) -> dict[str]:
+    def get_all_headers(self) -> Dict[str, str]:
         return self.__headers
 
     def get_content_length(self) -> int:
@@ -949,7 +949,7 @@ class _HttpClientHandler(Handler):
         ctx.close()
 
 class HttpReq():
-    def __init__(self, method: str, url: str, headers: dict = {}, body: bytes = None, ssl_ctx: SSLContext = None):
+    def __init__(self, method: str, url: str, headers: Dict[str, str] = {}, body: bytes = None, ssl_ctx: SSLContext = None):
         methods = ["GET", "POST", "PUT", "DELETE", "OPTION"]
         if method not in methods:
             raise ValueError("Invalid method " + url)
@@ -985,7 +985,7 @@ class HttpReq():
         newheaders = {}
 
         if headers is not None:
-            if not isinstance(headers, dict):
+            if not isinstance(headers, Dict):
                 raise ValueError("Invalid headers type {}".format(type(headers)))
             for k, v in headers.items():
                 newheaders["{}".format(k).strip().lower()] = "{}".format(v).strip()
@@ -1041,27 +1041,27 @@ class HttpReq():
 class HttpClient():
     
     @staticmethod
-    def get(url: str, headers: dict[str:str] = {}, ssl_ctx: SSLContext = None) -> HttpClientResponse:
+    def get(url: str, headers: Dict[str, str] = {}, ssl_ctx: SSLContext = None) -> HttpClientResponse:
         return HttpClient.request("GET", url, headers=headers, ssl_ctx=ssl_ctx)
         
     @staticmethod
-    def post(url: str, headers: dict[str:str] = {}, body: Union[bytes, FormData] = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
+    def post(url: str, headers: Dict[str, str] = {}, body: Union[bytes, FormData] = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
         return HttpClient.request("POST", url, headers=headers, body=body, ssl_ctx=ssl_ctx)
     
     @staticmethod
-    def put(url: str, headers: dict[str:str] = {}, body: Union[bytes, FormData] = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
+    def put(url: str, headers: Dict[str, str] = {}, body: Union[bytes, FormData] = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
         return HttpClient.request("PUT", url, headers=headers, body=body, ssl_ctx=ssl_ctx)
     
     @staticmethod
-    def delete(url: str, headers: dict[str:str] = {}, body: Union[bytes, FormData] = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
+    def delete(url: str, headers: Dict[str, str] = {}, body: Union[bytes, FormData] = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
         return HttpClient.request("DELETE", url, headers=headers, body=body, ssl_ctx=ssl_ctx)
     
     @staticmethod
-    def option(url: str, headers: dict[str:str] = {}, body: Union[bytes, FormData] = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
+    def option(url: str, headers: Dict[str, str] = {}, body: Union[bytes, FormData] = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
         return HttpClient.request("OPTION", url, headers=headers, body=body, ssl_ctx=ssl_ctx)
 
     @staticmethod
-    def request(method: str, url: str, headers: dict = {}, body: Union[bytes, FormData] = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
+    def request(method: str, url: str, headers: Dict[str, str] = {}, body: Union[bytes, FormData] = None, ssl_ctx: SSLContext = None) -> HttpClientResponse:
         if body is not None and isinstance(body, FormData):
             if headers is None:
                 headers = {}
@@ -1082,7 +1082,7 @@ class HttpClient():
         return res
     
     @staticmethod
-    def stream_request(method: str, url: str, headers: dict = {}, body: bytes = None, ssl_ctx: SSLContext = None, onresponse: Callable[[HttpClientResponse], None] = None, onchunk: Callable[[bytes], None] = None):
+    def stream_request(method: str, url: str, headers: Dict[str, str] = {}, body: bytes = None, ssl_ctx: SSLContext = None, onresponse: Callable[[HttpClientResponse], None] = None, onchunk: Callable[[bytes], None] = None):
         if body is not None and isinstance(body, FormData):
             if headers is None:
                 headers = {}

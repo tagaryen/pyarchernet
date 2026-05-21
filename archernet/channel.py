@@ -3,7 +3,7 @@ from .sslcontext import SSLContext
 from .handlers import NetError, HandlerList
 
 import ctypes, json, threading, traceback
-from typing import Union
+from typing import Union, Dict
 
 class Channel():
     __host: str
@@ -232,7 +232,7 @@ class Channel():
             data_bytes = data
         elif isinstance(data, str):
             data_bytes = data.encode('utf-8')
-        elif isinstance(data, dict) or isinstance(data, list):
+        elif isinstance(data, Dict) or isinstance(data, list):
             data_bytes = json.dumps(data).encode('utf-8')
         else :
             raise NetError("can not send type {}".format(type(data)))

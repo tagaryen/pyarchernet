@@ -1,8 +1,7 @@
 from abc import abstractmethod
-from typing import Union
-from .fair_lock import FairLock
+from typing import Union, List, Dict
 
-import threading, traceback, json
+import traceback, json
 
 class NetError(RuntimeError):
     def __init__(self, *args):
@@ -33,7 +32,7 @@ class ChannelContext:
             data_bytes = data
         elif isinstance(data, str):
             data_bytes = data.encode('utf-8')
-        elif isinstance(data, dict) or isinstance(data, list):
+        elif isinstance(data, Dict) or isinstance(data, list):
             data_bytes = json.dumps(data).encode('utf-8')
         else :
             self.__error("can not send type {}".format(type(data)))
@@ -135,7 +134,7 @@ class Handler:
 
 class BaseFrameHandler(Handler):
     
-    __data_buf: dict
+    __data_buf: Dict
 
     def __init__(self):
         self.__data_buf = {}
@@ -196,8 +195,8 @@ class BaseFrameHandler(Handler):
 
 
 class HandlerList:
-    __handlers: list[Handler]
-    __ctx_dict: dict
+    __handlers: List[Handler]
+    __ctx_dict: Dict
 
     def __init__(self):
         self.__handlers = []
@@ -221,7 +220,7 @@ class HandlerList:
         return head_ctx
 
     @property
-    def handlers(self) -> list[Handler]:
+    def handlers(self) -> List[Handler]:
         return self.__handlers
 
     def add_handler(self, handler: Handler):

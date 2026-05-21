@@ -1,12 +1,11 @@
-from archernet import ARPCClient, ARPCServer, AbstractUrlMatcher, SSLContext
-import threading
+from archernet import ARPCServer, AbstractUrlMatcher, SSLContext
 import time
-import io
+from typing import Dict
 
 
 class ServerURlA(AbstractUrlMatcher):
 
-    def on_message(self, msg: dict) -> dict:
+    def on_message(self, msg: Dict) -> Dict:
         print("收到客户端消息 {}".format(msg))
         return {'c': "python send"}
 

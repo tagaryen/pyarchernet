@@ -1,5 +1,5 @@
 import json, traceback, threading, time
-from typing import Callable
+from typing import Callable, Dict
 from abc import abstractmethod
 from .handlers import Handler, BaseFrameHandler, ChannelContext, NetError, HandlerList
 from .channel import Channel
@@ -20,7 +20,7 @@ def _check_is_not_found(input: bytes):
 class AbstractUrlMatcher():
 
     @abstractmethod
-    def on_message(self, msg: dict) -> dict:
+    def on_message(self, msg: Dict) -> Dict:
         '''
         收到对方的消息时
         '''
@@ -29,7 +29,7 @@ class AbstractUrlMatcher():
 
 class _ARPCHandler(Handler):
     
-    __url_map: dict
+    __url_map: Dict
 
     __ex_cb: Callable
 
@@ -143,7 +143,7 @@ class ARPCServer():
 
 class _ARPCClientHandler(_ARPCHandler):
 
-    __cb_map: dict
+    __cb_map: Dict
 
     def __init__(self, active_cb: Callable):
         self.__cb = active_cb
@@ -232,16 +232,16 @@ class ARPCClient():
         if start + ARPCClient.__TIMEOUT <= int(time.time()):
             raise NetError("Connect timeout")
     
-    def call(self, url: str, data: dict) -> dict:
+    def call(self, url: str, data: Dict) -> Dict:
         if not isinstance(url, str):
             raise ValueError("url must be a int")
-        if not isinstance(data, dict):
-            raise ValueError("data must be dict")
+        if not isinstance(data, Dict):
+            raise ValueError("data must be Dict")
         self.__do_connect()
         msg = {'res': None}
         msg_lock = threading.Lock()
         msg_cnd = threading.Condition(msg_lock)
-        def msg_cb(res: dict):
+        def msg_cb(res: Dict):
             msg['res'] = res
             with msg_lock:
                 msg_cnd.notify_all()
@@ -255,11 +255,11 @@ class ARPCClient():
             raise NetError("Can not get response")
         return msg['res']
     
-    def call_async(self, url: str, data: dict, msg_callback: Callable):
+    def call_async(self, url: str, data: Dict, msg_callback: Callable):
         if not isinstance(url, str):
             raise ValueError("url must be a int")
-        if not isinstance(data, dict):
-            raise ValueError("data must be dict")
+        if not isinstance(data, Dict):
+            raise ValueError("data must be Dict")
         if msg_callback is not None and not isinstance(msg_callback, Callable):
             raise ValueError("msg_callback must be Callable")
         self.__do_connect()
