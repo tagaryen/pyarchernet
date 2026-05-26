@@ -32,7 +32,6 @@ class MyHttp(BlockedHttpHandler):
         writer.end()
 
     def on_http_error(self, e: Exception):
-        format_exception(e)
         traceback.print_exception(e)
 
 

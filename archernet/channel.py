@@ -173,7 +173,7 @@ class Channel():
                 try:
                     ctx = self.handlerlist.find_channel_contxet(self)
                     data = bytes((ctypes.c_char * data_size).from_address(data_ptr))
-                    if ctx is not None:
+                    if ctx is not None and len(data) > 0:
                         ctx.handler.on_read(ctx, data)
                 except Exception as e:
                     if ctx is not None:

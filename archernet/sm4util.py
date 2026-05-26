@@ -118,12 +118,6 @@ def pkcs7_unpad(data):
 
 
 def sm4_encrypt_ecb(key_bytes, plaintext_bytes):
-    """
-    SM4 ECB模式加密
-    参数 key_bytes: 16字节密钥
-    参数 plaintext_bytes: 任意长度明文
-    参数 padding: 是否自动进行PKCS#7填充（默认True）
-    """
     rk = expand_key(key_bytes)
     plaintext_bytes = pkcs7_pad(plaintext_bytes)
     ciphertext = bytearray()
@@ -135,12 +129,6 @@ def sm4_encrypt_ecb(key_bytes, plaintext_bytes):
 
 
 def sm4_decrypt_ecb(key_bytes, ciphertext_bytes):
-    """
-    SM4 ECB模式解密
-    参数 key_bytes: 16字节密钥
-    参数 ciphertext_bytes: 密文（长度必须是16的倍数）
-    参数 padding: 是否自动移除PKCS#7填充（默认True）
-    """
     rk = expand_key(key_bytes)
     
     if len(ciphertext_bytes) % 16 != 0:
@@ -153,13 +141,6 @@ def sm4_decrypt_ecb(key_bytes, ciphertext_bytes):
     return pkcs7_unpad(bytes(plaintext))
 
 def sm4_encrypt_cbc(key_bytes, iv_bytes, plaintext_bytes):
-    """
-    SM4 CBC模式加密
-    参数 key_bytes: 16字节密钥
-    参数 iv_bytes: 16字节初始化向量
-    参数 plaintext_bytes: 任意长度明文
-    参数 padding: 是否自动进行PKCS#7填充（默认True）
-    """
     if len(iv_bytes) != 16:
         raise ValueError("IV长度必须为16字节")
     
@@ -181,13 +162,6 @@ def sm4_encrypt_cbc(key_bytes, iv_bytes, plaintext_bytes):
 
 
 def sm4_decrypt_cbc(key_bytes, iv_bytes, ciphertext_bytes):
-    """
-    SM4 CBC模式解密
-    参数 key_bytes: 16字节密钥
-    参数 iv_bytes: 16字节初始化向量
-    参数 ciphertext_bytes: 密文（长度必须是16的倍数）
-    参数 padding: 是否自动移除PKCS#7填充（默认True）
-    """
     if len(iv_bytes) != 16:
         raise ValueError("Invalid iv length")
     
@@ -207,44 +181,3 @@ def sm4_decrypt_cbc(key_bytes, iv_bytes, ciphertext_bytes):
         prev_block = block
     
     return pkcs7_unpad(bytes(plaintext))
-
-
-if __name__ == "__main__":
-    # 测试向量（GM/T 0002-2012 附录A中的示例1）
-    TEST_KEY = bytes.fromhex("0123456789abcdeffedcba9876543210")
-    TEST_PLAINTEXT = bytes.fromhex("0123456789abcdeffedcba9876543210")
-    TEST_CIPHERTEXT = bytes.fromhex("681edf34d206965e86b3e94f536e4246")
-    
-    # ECB模式测试
-    rk = expand_key(TEST_KEY)
-    computed_cipher = sm4_encrypt_block(TEST_PLAINTEXT, rk)
-    computed_plain = sm4_decrypt_block(computed_cipher, rk)
-    
-    print("=== SM4 标准测试向量验证 ===")
-    print(f"密钥:          {TEST_KEY.hex()}")
-    print(f"明文:          {TEST_PLAINTEXT.hex()}")
-    print(f"期望密文:      {TEST_CIPHERTEXT.hex()}")
-    print(f"计算密文:      {computed_cipher.hex()}")
-    print(f"密文匹配:      {'✓' if computed_cipher == TEST_CIPHERTEXT else '✗'}")
-    print(f"解密还原:      {computed_plain.hex()}")
-    print(f"解密匹配:      {'✓' if computed_plain == TEST_PLAINTEXT else '✗'}")
-    
-    # 功能演示
-    print("\n=== 功能演示 ===")
-    key = b'0123456789abcdef'
-    plaintext = b"Hello, SM4 encryption! This is a test message."
-    
-    # ECB模式
-    cipher_ecb = sm4_encrypt_ecb(key, plaintext)
-    plain_ecb = sm4_decrypt_ecb(key, cipher_ecb)
-    print(f"ECB模式 - 原文: {plaintext[:20]}...")
-    print(f"         - 密文: {cipher_ecb.hex()[:40]}...")
-    print(f"         - 解密: {plain_ecb[:20].decode()}... ✓")
-    
-    # CBC模式
-    iv = b'1234567890123456'
-    cipher_cbc = sm4_encrypt_cbc(key, iv, plaintext)
-    plain_cbc = sm4_decrypt_cbc(key, iv, cipher_cbc)
-    print(f"CBC模式 - 原文: {plaintext[:20]}...")
-    print(f"         - 密文: {cipher_cbc.hex()[:40]}...")
-    print(f"         - 解密: {plain_cbc[:20].decode()}... ✓")

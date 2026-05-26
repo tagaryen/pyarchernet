@@ -405,17 +405,16 @@ class HttpRequest():
 
 
     def __parse_head(self, text: bytes):
-        lines = text.splitlines(keepends=False)
-        count = len(lines)
-        if count < 3:
+        lr = text.find(b'\r\n')
+        if lr <= 0:
             self.__ok = False
-            self.__err = "Bad Request. Head lines less than 3"
+            self.__err = "Bad Request. Bad Head Line ".format(text)
             return 
-        title = str(lines[0], 'utf-8').strip()
+        title = str(text[:lr], 'utf-8').strip()
         titles = title.split(' ')
         if len(titles) != 3:
             self.__ok = False
-            self.__err = "Bad Request. Bad Header " + title
+            self.__err = "Bad Request. Bad First Line " + title
             return 
         self.__method = titles[0].strip()
         if not self.__parse_url(titles[1].strip()):
@@ -423,27 +422,27 @@ class HttpRequest():
             self.__err = "Bad Request. Bad Url " + titles[1].strip()
             return 
         self.__version = titles[2].strip()
-        idx = 0
-        for i in range(1, count):
-            line = str(lines[i], 'utf-8').strip()
-            if line == '':
-                idx = i + 1
-                break
-            t = line.find(':')
-            if t <= 0 or t >= len(line) - 1:
+        text = text[lr+2:]
+        while True:
+            lr = text.find(b'\r\n')
+            if lr < 0:
                 self.__ok = False
-                self.__err = "Bad Request. Bad Header " + line
+                self.__err = "Bad Request. Bad Header {}".format(text)
                 return 
-            k = line[0:t].strip()
-            v = line[t+1:].strip()
+            if lr == 0:
+                text = text[lr+2:]
+                self.__headparsed = True
+                break
+            line = text[:lr]
+            p = line.find(b':')
+            if p <= 0 or p >= len(line) - 1:
+                self.__ok = False
+                self.__err = "Bad Request. Bad Header {}".format(line)
+                return 
+            k = str(line[:p], 'utf-8').strip()
+            v = str(line[p+1:], 'utf-8').strip()
             self.__headers[k.lower()] = v
-        l = idx
-        if l > 3:
-            self.__headparsed = True
-        else:
-            self.__ok = False
-            self.__err = "Bad Request. Bad Header " + line
-            return 
+            text = text[lr+2:]
         
         if "content-length" in self.__headers:
             try:
@@ -452,7 +451,6 @@ class HttpRequest():
                 self.__ok = False
                 self.__err = "Bad Request. Bad Content-Length: " + self.__headers["content-length"]
                 return
-
         elif "transfer-encoding" in self.__headers and 'chunked' == self.__headers["transfer-encoding"]:
             self.__chunked = True
         else:
@@ -465,8 +463,7 @@ class HttpRequest():
             self.__finished = True
 
         if not self.__finished:
-            remain = b'\r\n'.join(lines[l:])
-            self.__parse_content(remain)
+            self.__parse_content(text)
     
     def __parse_content(self, text:bytes):
         if self.__chunked:
@@ -568,16 +565,6 @@ class HttpResponse():
             raise ValueError("encodig must be str")
         self.__encoding = encodig
     
-    # def set_content(self, content: Union[bytes , str]):
-    #     if isinstance(content, str):
-    #         self.__content = bytes(content, encoding=self.__encoding)
-    #     elif isinstance(content, bytes):
-    #         self.__content = content
-    #     else:
-    #         raise ValueError("content must be str or bytes")
-    #     self.__content_length = len(self.__content)
-    #     self.__headers["content-length"] = self.__content_length
-
     def send_content(self, content: Union[bytes , str]):
         if isinstance(content, str):
             self.__content = bytes(content, encoding=self.__encoding)
@@ -631,7 +618,7 @@ class BlockedHttpHandler(Handler):
 
         if not req.ok:
             res.set_status(HttpStatusCode.BAD_REQUEST)
-            self.on_http_error(ValueError(req.__err))
+            self.on_http_error(ValueError(req._HttpRequest__err))
         else:
             res._HttpResponse__version = req._HttpRequest__version
             if req.finished:

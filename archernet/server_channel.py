@@ -148,7 +148,7 @@ class ServerChannel:
                     channel = self.__get_channel(fd, str(host, 'utf-8'), port)
                     data = bytes((ctypes.c_char * data_size).from_address(data_ptr))
                     ctx = self.handlerlist.find_channel_contxet(channel)
-                    if ctx is not None:
+                    if ctx is not None and len(data) > 0:
                         ctx.handler.on_read(ctx, data)
                 except Exception as e:
                     if ctx is not None:
