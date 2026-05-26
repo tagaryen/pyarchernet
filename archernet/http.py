@@ -5,7 +5,7 @@ from .unordered_map import UnorderedMap
 from .server_channel import ServerChannel
 
 from urllib.parse import unquote
-import threading, os, mimetypes
+import threading, os, mimetypes, sys
 from typing import Callable, List, Generator, Union, Dict
 from abc import abstractmethod
 from datetime import datetime
@@ -405,7 +405,7 @@ class HttpRequest():
 
 
     def __parse_head(self, text: bytes):
-        lines = text.splitlines(keepends=True)
+        lines = text.splitlines(keepends=False)
         count = len(lines)
         if count < 3:
             self.__ok = False
@@ -475,9 +475,12 @@ class HttpRequest():
             while True:
                 lf = text.find(b'\r\n')
                 if lf <= 0:
-                    self.__cache = text
-                    return 
-                
+                    if len(text) == 1 and text[0] == 48:
+                        self.__finished = True
+                        return
+                    else:
+                        self.__cache = text
+                        return 
                 chunked_len = int(text[0:lf].strip(), 16)
                 if chunked_len == 0:
                     self.__finished = True

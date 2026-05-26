@@ -1,27 +1,30 @@
 from archernet import HttpStatusCode, HttpRequest, HttpResponse, BlockedHttpHandler, HttpServer, HttpClient, HttpClientResponse, SSLContext, Multipart, FormData, format_exception
 
+import sys, traceback
 
-with open('gm_cert/ca.crt', 'r', encoding='utf-8') as file:
-    ca = file.read()
-with open('gm_cert/server.crt', 'r', encoding='utf-8') as file:
-    crt = file.read()
-with open('gm_cert/server.key', 'r', encoding='utf-8') as file:
-    key = file.read()
-with open('gm_cert/server_en.crt', 'r', encoding='utf-8') as file:
-    en_crt = file.read()
-with open('gm_cert/server_en.key', 'r', encoding='utf-8') as file:
-    en_key = file.read()
+# with open('gm_cert/ca.crt', 'r', encoding='utf-8') as file:
+#     ca = file.read()
+# with open('gm_cert/server.crt', 'r', encoding='utf-8') as file:
+#     crt = file.read()
+# with open('gm_cert/server.key', 'r', encoding='utf-8') as file:
+#     key = file.read()
+# with open('gm_cert/server_en.crt', 'r', encoding='utf-8') as file:
+#     en_crt = file.read()
+# with open('gm_cert/server_en.key', 'r', encoding='utf-8') as file:
+#     en_key = file.read()
 
-sslctx = SSLContext(is_client_mode = False)
-sslctx.ca = ca
-sslctx.crt = crt
-sslctx.key = key
-sslctx.en_crt = en_crt
-sslctx.en_key = en_key
+# sslctx = SSLContext(is_client_mode = False)
+# sslctx.ca = ca
+# sslctx.crt = crt
+# sslctx.key = key
+# sslctx.en_crt = en_crt
+# sslctx.en_key = en_key
 
 class MyHttp(BlockedHttpHandler):
 
     def on_http_message(self, req: HttpRequest, res: HttpResponse):
+        print("here: {}".format(req.get_content()))
+        sys.stdout.flush()
         res.set_header('content-type', 'text/plain')
         # res.send_content('{"nihao":"shuai"}')
         writer = res.stream_writer()
@@ -30,7 +33,8 @@ class MyHttp(BlockedHttpHandler):
 
     def on_http_error(self, e: Exception):
         format_exception(e)
+        traceback.print_exception(e)
 
 
-server = HttpServer(2, sslctx=sslctx)
-server.listen_async("0.0.0.0", 9666, MyHttp())
+server = HttpServer(2)
+server.listen_async("127.0.0.1", 9666, MyHttp())

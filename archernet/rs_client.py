@@ -1,4 +1,4 @@
-import threading, time, os
+import threading, time, os, base64
 from .handlers import Handler, BaseFrameHandler, ChannelContext, NetError, HandlerList
 from .channel import Channel
 from .sm4util import sm4_encrypt_ecb
@@ -140,7 +140,6 @@ class _RSConnector(Handler):
         ctx.to_prev_handler_on_write(data)
         
     def on_error(self, ctx: ChannelContext, e: Exception):
-        traceback.print_exc(e)
         with self.condition:
             self.condition.notify_all() 
 
@@ -162,3 +161,8 @@ class RSClient():
 
     def get(self, key:str)->str:
         return str(self.connector.sendGet(bytes(key, 'utf-8')), 'utf-8')
+    
+    @staticmethod
+    def generate_signature(url: str, time: int, key: bytes) -> str:
+        sig_bytes = sm4_encrypt_ecb(key, bytes(url+time, 'utf-8'))
+        return base64.b64encode(sig_bytes).decode('utf-8')
