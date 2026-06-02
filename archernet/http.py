@@ -471,13 +471,11 @@ class HttpRequest():
             self.__cache = b''
             while True:
                 lf = text.find(b'\r\n')
-                if lf <= 0:
-                    if len(text) == 1 and text[0] == 48:
-                        self.__finished = True
-                        return
-                    else:
-                        self.__cache = text
-                        return 
+                if lf < 0:
+                    self.__cache = text
+                    return 
+                elif lf == 0:
+                    text = text[2:]
                 chunked_len = int(text[0:lf].strip(), 16)
                 if chunked_len == 0:
                     self.__finished = True
@@ -845,11 +843,11 @@ class HttpClientResponse():
             c = len(text)
             while c > 0:
                 lf = text.find(b'\r\n')
-                if lf <= 0:
+                if lf < 0:
                     self.__cache = text
                     return 
-                if lf == 1:
-                    text = text[1:]
+                elif lf == 0:
+                    text = text[2:]
                     continue
                 end = lf + 2
                 chunked_len = int(text[0:lf].strip(), 16)

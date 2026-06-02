@@ -81,5 +81,8 @@ import traceback
 
 
 res = HttpClient.get("https://www.aliyun.com")
+file = open('./tmp.html', 'a', encoding='utf-8')
+file.write(str(res.content, 'utf-8'))
 # res = HttpClient.get("https://www.baidu.com")
-print(str(res.content))
+# res = HttpClient.post("http://127.0.0.1:9666/hello", body=b'nihaowahhh')
+# print(str(res.content, 'utf-8'))
