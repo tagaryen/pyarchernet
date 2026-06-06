@@ -1,5 +1,5 @@
 import threading, time, os, base64
-from .handlers import Handler, BaseFrameHandler, ChannelContext, NetError, HandlerList
+from .handlers import Handler, ChannelContext, NetError, HandlerList
 from .channel import Channel
 from .sm4util import sm4_encrypt_ecb
 from .exception import format_exception
@@ -62,7 +62,6 @@ class _RSConnector(Handler):
         self.key = key
 
         handler_list = HandlerList()
-        handler_list.add_handler(BaseFrameHandler())
         handler_list.add_handler(self)
         self.channel = Channel(host, port, handlerlist=handler_list)
         self.ctx = None
@@ -101,7 +100,7 @@ class _RSConnector(Handler):
         
         cb = _ResWaiting(type)
         self.callback_map[nonce.hex()] = cb
-        self.on_write(self.ctx, data)
+        self.on_write(self.ctx, len(data).to_bytes(length=4, byteorder='big') + data)
         cb.wait_for_result()
         return cb.value
 
@@ -111,8 +110,10 @@ class _RSConnector(Handler):
         with self.condition:
             self.condition.notify_all() 
 
-    def on_read(self, ctx: ChannelContext, data: bytes):
+    def on_read(self, ctx: ChannelContext):
         try:
+            total_len = ctx.read_int32()
+            data = ctx.read_len(total_len)
             if b'9607' != data[0:4] :
                 raise NetError("Invalid input data")
             nonce = data[4:20]

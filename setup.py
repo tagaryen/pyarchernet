@@ -16,7 +16,7 @@ URL = 'https://github.com/tagaryen/pyarchernet'
 EMAIL = '2564928358@qq.com'
 AUTHOR = 'Archer'
 REQUIRES_PYTHON = '>=3.6.8'
-VERSION = '1.4.4'
+VERSION = '1.5.0'
 
 # What packages are required for this module to be executed?
 REQUIRED = []

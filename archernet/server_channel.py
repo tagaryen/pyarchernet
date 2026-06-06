@@ -5,7 +5,7 @@ from .sslcontext import SSLContext
 from .unordered_map import UnorderedMap
 from .exception import format_exception
 
-import ctypes, threading, signal
+import ctypes, threading
 
 class ServerChannel:
     # __SREVER_MAP = UnorderedMap()
@@ -142,14 +142,12 @@ class ServerChannel:
                     else: 
                         format_exception(e)
 
-        def server_on_read(fd: int, host: bytes, port: int, data_ptr: ctypes.c_void_p, data_size: int):
+        def server_on_read(fd: int, host: bytes, port: int):
             if self.handlerlist is not None:
                 try:
                     channel = self.__get_channel(fd, str(host, 'utf-8'), port)
-                    data = bytes((ctypes.c_char * data_size).from_address(data_ptr))
                     ctx = self.handlerlist.find_channel_contxet(channel)
-                    if ctx is not None and len(data) > 0:
-                        ctx.handler.on_read(ctx, data)
+                    ctx.handler.on_read(ctx)
                 except Exception as e:
                     if ctx is not None:
                         ctx.handler.on_error(ctx, e)
@@ -184,7 +182,7 @@ class ServerChannel:
         OnConnectCb = ctypes.CFUNCTYPE(None, ctypes.c_int64, ctypes.c_char_p, ctypes.c_int)
         on_connect = OnConnectCb(server_on_connect)
         
-        OnReadCb = ctypes.CFUNCTYPE(None, ctypes.c_int64, ctypes.c_char_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_int64)
+        OnReadCb = ctypes.CFUNCTYPE(None, ctypes.c_int64, ctypes.c_char_p, ctypes.c_int)
         on_read = OnReadCb(server_on_read)
         
         OnErrorCb = ctypes.CFUNCTYPE(None, ctypes.c_int64, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p)
@@ -194,18 +192,13 @@ class ServerChannel:
         on_close = OnCloseCb(server_on_close)
         
         def block_listen():
-            ARCHERLIB.ARCHER_server_channel_listen.restype = ctypes.c_char_p
-            ret = ARCHERLIB.ARCHER_server_channel_listen(c_fd, c_host, c_port, c_ssl, c_thread, c_ca, c_crt, c_key, c_en_crt, c_en_key, c_max_ver, c_min_ver, on_connect, on_read, on_error, on_close)
-            if ret is not None and len(ret) > 0:
-                raise NetError(str(ret, 'utf-8'))
-        
-        exit_event = threading.Event()
-
-        def signal_handler(signum, frame):
-            self.close()
-            exit_event.set()
-        
-        signal.signal(signal.SIGINT, signal_handler)
+            try:
+                ARCHERLIB.ARCHER_server_channel_listen.restype = ctypes.c_char_p
+                ret = ARCHERLIB.ARCHER_server_channel_listen(c_fd, c_host, c_port, c_ssl, c_thread, c_ca, c_crt, c_key, c_en_crt, c_en_key, c_max_ver, c_min_ver, on_connect, on_read, on_error, on_close)
+                if ret is not None and len(ret) > 0:
+                    raise NetError(str(ret, 'utf-8'))
+            except OSError:
+                pass
 
         if self.__is_async:
             try:

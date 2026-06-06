@@ -6,6 +6,13 @@ from .exception import format_exception
 import ctypes, json, threading
 from typing import Union, Dict
 
+
+ARCHERLIB.ARCHER_channel_new_fd.restype = ctypes.c_int64
+ARCHERLIB.ARCHER_channel_connect.restype = ctypes.c_char_p
+ARCHERLIB.ARCHER_channel_write.restype = ctypes.c_void_p
+ARCHERLIB.ARCHER_channel_close.restype = ctypes.c_void_p
+ARCHERLIB.ARCHER_channel_read.restype = ctypes.c_int32
+
 class Channel():
     __host: str
     __port: int
@@ -106,7 +113,6 @@ class Channel():
         if not self.__client_mode:
             raise NetError("server side channel can not connect to remote")
 
-        ARCHERLIB.ARCHER_channel_new_fd.restype = ctypes.c_int64
         self.__fd = ARCHERLIB.ARCHER_channel_new_fd()
 
         c_fd = ctypes.c_int64(self.__fd)
@@ -168,13 +174,11 @@ class Channel():
                     else:
                         format_exception(e)
 
-        def client_on_read(data_ptr: ctypes.c_void_p, data_size: int):
+        def client_on_read():
             if self.handlerlist is not None:
                 try:
                     ctx = self.handlerlist.find_channel_contxet(self)
-                    data = bytes((ctypes.c_char * data_size).from_address(data_ptr))
-                    if ctx is not None and len(data) > 0:
-                        ctx.handler.on_read(ctx, data)
+                    ctx.handler.on_read(ctx)
                 except Exception as e:
                     if ctx is not None:
                         ctx.handler.on_error(ctx, e)
@@ -198,7 +202,7 @@ class Channel():
         OnConnectCb = ctypes.CFUNCTYPE(None)
         on_connect = OnConnectCb(client_on_connect)
         
-        OnReadCb = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_int32)
+        OnReadCb = ctypes.CFUNCTYPE(None)
         on_read = OnReadCb(client_on_read)
         
         OnErrorCb = ctypes.CFUNCTYPE(None, ctypes.c_char_p)
@@ -208,7 +212,6 @@ class Channel():
         on_close = OnCloseCb(client_on_close)
 
         def block_connect():
-            ARCHERLIB.ARCHER_channel_connect.restype = ctypes.c_char_p
             ret = ARCHERLIB.ARCHER_channel_connect(c_fd, c_host, c_port, c_verify_peer, 
                                                    c_ca, c_crt, c_key, c_en_crt, c_en_key, 
                                                    c_matched_host, c_named_curves, c_max_ver, c_min_ver,
@@ -240,8 +243,54 @@ class Channel():
         c_fd = ctypes.c_int64(self.__fd)
         c_data = ctypes.create_string_buffer(data_bytes)
         c_size = ctypes.c_int32(len(data_bytes))
-        ARCHERLIB.ARCHER_channel_write.restype = ctypes.c_void_p
         ARCHERLIB.ARCHER_channel_write(c_fd, c_data, c_size)
+
+    
+    def read_int16(self) -> int:
+        c_fd = ctypes.c_int64(self.__fd)
+        buf = ctypes.create_string_buffer(2)
+
+        ARCHERLIB.ARCHER_channel_read(c_fd, buf, 2)
+        b2 = buf.raw
+        return int.from_bytes(b2, byteorder='big', signed=False)
+
+    def read_int32(self) -> int:
+        c_fd = ctypes.c_int64(self.__fd)
+        buf = ctypes.create_string_buffer(4)
+
+        ARCHERLIB.ARCHER_channel_read(c_fd, buf, 4)
+        b4 = buf.raw
+        return int.from_bytes(b4, byteorder='big', signed=False)
+    
+    def read_int64(self) -> int:
+        c_fd = ctypes.c_int64(self.__fd)
+        buf = ctypes.create_string_buffer(8)
+
+        ARCHERLIB.ARCHER_channel_read(c_fd, buf, 8)
+        b8 = buf.raw
+        return int.from_bytes(b8, byteorder='big', signed=False)
+
+    def read(self) -> bytes:
+        c_fd = ctypes.c_int64(self.__fd)
+        buf = ctypes.create_string_buffer(4096)
+
+        readn = ARCHERLIB.ARCHER_channel_read(c_fd, buf, 4096)
+
+        return buf.raw[0:readn]
+        
+    
+    def read_len(self, len: int) -> bytes:
+        c_fd = ctypes.c_int64(self.__fd)
+        buf = ctypes.create_string_buffer(len)
+        content = b''
+        cnt = 0
+        while True:
+            readn = ARCHERLIB.ARCHER_channel_read(c_fd, buf, len - cnt)
+            content += buf.raw[0:readn]
+            cnt += readn
+            if cnt >= len:
+                break
+        return content
 
     
     def close(self):

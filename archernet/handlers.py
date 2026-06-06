@@ -57,11 +57,11 @@ class ChannelContext:
             self.__error("can not found next handler")
         self.__next_ctx.handler.on_connect(self.__next_ctx)
     
-    def to_next_handler_on_read(self, data: bytes):
+    def to_next_handler_on_read(self):
         if self.__next_ctx is None:
             self.__error("can not found next handler")
         else:
-            self.__next_ctx.handler.on_read(self.__next_ctx, data)
+            self.__next_ctx.handler.on_read(self.__next_ctx)
     
     def to_next_handler_on_error(self, e: Exception):
         if self.__next_ctx is None:
@@ -85,6 +85,22 @@ class ChannelContext:
         data_bytes = self.__to_bytes(data)
         self.__handler.on_write(data_bytes)
 
+    def read_int16(self) -> int:
+        return self.__channel.read_int16()
+    
+    def read_int32(self) -> int:
+        return self.__channel.read_int32()
+    
+    def read_int64(self) -> int:
+        return self.__channel.read_int64()
+    
+    def read(self) -> bytes:
+        return self.__channel.read()
+    
+    def read_len(self, len: int) -> bytes:
+        return self.__channel.read_len(len)
+    
+
     def close(self):
         self.__next_ctx = None
         self.__prev_ctx = None
@@ -107,7 +123,7 @@ class Handler:
         pass
 
     @abstractmethod
-    def on_read(self, ctx: ChannelContext, data: bytes):
+    def on_read(self, ctx: ChannelContext):
         ''' 当有数据被读取时
         '''
         pass
@@ -130,69 +146,6 @@ class Handler:
         ''' 当连接关闭时
         '''
         pass
-
-
-
-class BaseFrameHandler(Handler):
-    
-    __data_buf: Dict
-
-    def __init__(self):
-        self.__data_buf = {}
-        super().__init__()
-
-    def on_connect(self, ctx: ChannelContext):
-        if ctx.has_next_handler():
-            ctx.to_next_handler_on_connect()
-
-    def on_read(self, ctx: ChannelContext, data: bytes):
-        if not ctx.has_next_handler():
-            return 
-        
-        key = ctx.channel.host + str(ctx.channel.port)
-
-        if key not in self.__data_buf:
-            self.__data_buf[key] = {
-                "length": -1,
-                "buf": b''
-            }
-        try:
-            self.__data_buf[key]["buf"] = self.__data_buf[key]["buf"] + data
-            
-            buf = self.__data_buf[key]["buf"]
-            size = self.__data_buf[key]["length"]
-            if size == -1:
-                if len(buf) < 4:
-                    return
-                size = int.from_bytes(buf[0:4], byteorder='big', signed=False)
-                buf = buf[4:]
-
-            while len(buf) >= size:
-                ctx.to_next_handler_on_read(buf[0:size])
-                buf = buf[size:]
-                if len(buf) < 4:
-                    self.__data_buf[key]["length"] = -1
-                    self.__data_buf[key]["buf"] = buf
-                    return
-                size = int.from_bytes(buf[0:4], byteorder='big', signed=False)
-                buf = buf[4:]
-            
-            self.__data_buf[key]["length"] = size
-            self.__data_buf[key]["buf"] = buf
-        except Exception as e:
-            self.on_error(ctx, e)
-
-    def on_error(self, ctx: ChannelContext, e: Exception):
-        ctx.to_next_handler_on_error(e)
-
-    def on_close(self, ctx: ChannelContext):
-        if ctx.has_next_handler():
-            ctx.to_next_handler_on_close()
-
-    def on_write(self, ctx: ChannelContext, data: bytes):
-        size = len(data)
-        size_bytes = size.to_bytes(4, byteorder='big', signed=False)
-        ctx.to_prev_handler_on_write(size_bytes + data)
 
 
 class HandlerList:

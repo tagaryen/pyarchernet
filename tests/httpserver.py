@@ -34,5 +34,5 @@ class MyHttp(BlockedHttpHandler):
         format_exception(e)
 
 
-server = HttpServer(2, sslctx=sslctx)
-server.listen_async("0.0.0.0", 9666, MyHttp())
+server = HttpServer(2)
+server.listen_async("127.0.0.1", 9666, MyHttp())

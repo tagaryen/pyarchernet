@@ -606,7 +606,8 @@ class BlockedHttpHandler(Handler):
         self.__map_lock = threading.Lock()
         super().__init__()
 
-    def on_read(self, ctx: ChannelContext, data: bytes):
+    def on_read(self, ctx: ChannelContext):
+        data = ctx.read()
         req = self.__get_http_request(ctx)
         res = self.__get_http_response(ctx)
         if not req.headparsed:
@@ -903,8 +904,9 @@ class _HttpClientHandler(Handler):
             for chunk in self.formdata.generate_stream_body():
                 ctx.to_prev_handler_on_write(chunk)
 
-    def on_read(self, ctx: ChannelContext, data: bytes):
+    def on_read(self, ctx: ChannelContext):
         try:
+            data = ctx.read()
             if not self.res.headparsed:
                 self.res._HttpClientResponse__parse_head(data)
                 if self.stream:

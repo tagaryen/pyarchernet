@@ -1,4 +1,4 @@
-from archernet import ARPCServer, AbstractUrlMatcher, SSLContext
+from archernet import ARPCServer, ARPCClient, AbstractUrlMatcher, SSLContext
 import time
 from typing import Dict
 
@@ -34,26 +34,26 @@ server.listen_async("127.0.0.1", 9067)
 
 time.sleep(1)
 
-# with open('tests/gm_cert/server.crt', 'r', encoding='utf-8') as file:
-#     cli_crt = file.read()
-# with open('tests/gm_cert/server.key', 'r', encoding='utf-8') as file:
-#     cli_key = file.read()
-# with open('tests/gm_cert/server_en.crt', 'r', encoding='utf-8') as file:
-#     cli_en_crt = file.read()
-# with open('tests/gm_cert/server_en.key', 'r', encoding='utf-8') as file:
-#     cli_en_key = file.read()
+with open('tests/gm_cert/cli.crt', 'r', encoding='utf-8') as file:
+    cli_crt = file.read()
+with open('tests/gm_cert/cli.key', 'r', encoding='utf-8') as file:
+    cli_key = file.read()
+with open('tests/gm_cert/cli_en.crt', 'r', encoding='utf-8') as file:
+    cli_en_crt = file.read()
+with open('tests/gm_cert/cli_en.key', 'r', encoding='utf-8') as file:
+    cli_en_key = file.read()
 
-# sslctx1 = SSLContext(is_client_mode = True)
-# sslctx1.verify_peer = False
-# sslctx1.ca = ca
-# sslctx1.crt = cli_crt
-# sslctx1.key = cli_key
-# sslctx1.en_crt = cli_en_crt
-# sslctx1.en_key = cli_en_key
+sslctx1 = SSLContext(is_client_mode = True)
+sslctx1.verify_peer = False
+sslctx1.ca = ca
+sslctx1.crt = cli_crt
+sslctx1.key = cli_key
+sslctx1.en_crt = cli_en_crt
+sslctx1.en_key = cli_en_key
 
-# cli = ARPCClient("127.0.0.1", 9067, sslctx = sslctx1)
-# res0 = cli.call("/你好", {'a':'你好url'})
-# print("收到服务端消息 {}".format(res0))
+cli = ARPCClient("127.0.0.1", 9067, sslctx = sslctx1)
+res0 = cli.call("/你好", {'a':'你好url'})
+print("收到服务端消息 {}".format(res0))
 time.sleep(10)
 
 # cli.close()

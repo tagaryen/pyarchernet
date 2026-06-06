@@ -1,7 +1,7 @@
 import json, threading, time
 from typing import Callable, Dict
 from abc import abstractmethod
-from .handlers import Handler, BaseFrameHandler, ChannelContext, NetError, HandlerList
+from .handlers import Handler, ChannelContext, NetError, HandlerList
 from .channel import Channel
 from .server_channel import ServerChannel
 from .sslcontext import SSLContext
@@ -31,7 +31,6 @@ class AbstractUrlMatcher():
 class _ARPCHandler(Handler):
     
     __url_map: Dict
-
     __ex_cb: Callable
 
     def __init__(self):
@@ -73,26 +72,25 @@ class _ARPCServerHandler(_ARPCHandler):
         data = NOTFOUND_LEN.to_bytes(2, byteorder="big", signed=False) + NOTFOUND
         ctx.to_prev_handler_on_write(data)
 
-    def on_read(self, ctx: ChannelContext, data: bytes):
+    def on_read(self, ctx: ChannelContext):
         try: 
-            off_s, off_e = 0, 2
-            url_len = int.from_bytes(data[off_s:off_e], byteorder="big", signed=False)
-            off_s, off_e = off_e, off_e + url_len
-            url = data[off_s:off_e]
+            total_len = ctx.read_int32()
+            data = ctx.read_len(total_len)
+            url_len = int.from_bytes(data[0:2], byteorder='big', signed=False)
+            url = data[2:url_len+2]
             if _check_is_not_found(url):
                 super().on_error(ctx, NetError("Client send not found"))
                 return 
             url = str(url, 'utf-8')
-            off_s = off_e
             matcher = super().get_url_matcher(url)
             if matcher is None:
                 super().on_error(ctx, NetError("Can not found matcher for url {}".format(url)))
                 self.__send_not_found(ctx)
             else:
-                res = matcher.on_message(json.loads(str(data[off_s:], 'utf-8')))
+                res = matcher.on_message(json.loads(str(data[2+url_len:], 'utf-8')))
                 res = {} if res is None else res
                 res_bs = data[:2+url_len] + bytes(json.dumps(res), 'utf-8')
-                ctx.to_prev_handler_on_write(res_bs)
+                ctx.to_prev_handler_on_write(len(res_bs).to_bytes(byteorder='big', length=4, signed=False)+res_bs)
         except Exception as e:
             super().on_error(ctx, e)
         
@@ -124,7 +122,6 @@ class ARPCServer():
         if not isinstance(port, int):
             raise ValueError("port must be a int")
         handlerList = HandlerList()
-        handlerList.add_handler(BaseFrameHandler())
         handlerList.add_handler(self.__handler)
         self.__server = ServerChannel(host, port, self.__threads, self.__sslctx, handlerlist=handlerList)
         if is_async:
@@ -154,22 +151,21 @@ class _ARPCClientHandler(_ARPCHandler):
     def on_connect(self, ctx: ChannelContext):
         self.__cb(ctx, True)
 
-    def on_read(self, ctx: ChannelContext, data: bytes):
+    def on_read(self, ctx: ChannelContext):
         try: 
-            off_s, off_e = 0, 2
-            url_len = int.from_bytes(data[off_s:off_e], byteorder="big", signed=False)
-            off_s, off_e = off_e, url_len + off_e
-            url = data[off_s:off_e]
+            total_len = ctx.read_int32()
+            data = ctx.read_len(total_len)
+            url_len = int.from_bytes(data[0:2], byteorder='big', signed=False)
+            url = data[2:url_len+2]
             if _check_is_not_found(url):
                 super().on_error(ctx, NetError("Server send not found"))
                 return 
             url = str(url, 'utf-8')
-            data = str(data[off_e:], 'utf-8')
             cb = self.get_url_cb(url)
             if cb is None:
                 super().on_error(ctx, NetError("Can not found matcher for url {}".format(url)))
             else:
-                cb(json.loads(data))
+                cb(json.loads(str(data[2+url_len:], 'utf-8')))
         except Exception as e:
             super().on_error(ctx, e)
 
@@ -222,7 +218,6 @@ class ARPCClient():
         if self.__active:
             return
         handlerList = HandlerList()
-        handlerList.add_handler(BaseFrameHandler())
         handlerList.add_handler(self.__handler)
         self.__channel = Channel(self.__host, self.__port, sslctx=self.__sslctx, handlerlist=handlerList)
         self.__channel.connect_async()
@@ -266,9 +261,9 @@ class ARPCClient():
         self.__do_connect()
         self.__handler.add_url_cb(url, msg_callback)
         res = b'{}' if data is None else json.dumps(data)
-        url_bs = bytes(url, 'utf-8')
+        url_bs = url.encode('utf-8')
         res_bs = len(url_bs).to_bytes(2, byteorder="big", signed=False) + url_bs + bytes(res, 'utf-8')
-        self.__ctx.to_prev_handler_on_write(res_bs)
+        self.__ctx.to_prev_handler_on_write(len(res_bs).to_bytes(4, byteorder="big", signed=False) + res_bs)
 
     def close(self):
         self.__channel.close()
