@@ -74,23 +74,26 @@ class _ARPCServerHandler(_ARPCHandler):
 
     def on_read(self, ctx: ChannelContext):
         try: 
-            total_len = ctx.read_int32()
-            data = ctx.read_len(total_len)
-            url_len = int.from_bytes(data[0:2], byteorder='big', signed=False)
-            url = data[2:url_len+2]
-            if _check_is_not_found(url):
-                super().on_error(ctx, NetError("Client send not found"))
-                return 
-            url = str(url, 'utf-8')
-            matcher = super().get_url_matcher(url)
-            if matcher is None:
-                super().on_error(ctx, NetError("Can not found matcher for url {}".format(url)))
-                self.__send_not_found(ctx)
-            else:
-                res = matcher.on_message(json.loads(str(data[2+url_len:], 'utf-8')))
-                res = {} if res is None else res
-                res_bs = data[:2+url_len] + bytes(json.dumps(res), 'utf-8')
-                ctx.to_prev_handler_on_write(len(res_bs).to_bytes(byteorder='big', length=4, signed=False)+res_bs)
+            while True:
+                total_len = ctx.read_int32()
+                if total_len < 0:
+                    return
+                data = ctx.read_len(total_len)
+                url_len = int.from_bytes(data[0:2], byteorder='big', signed=False)
+                url = data[2:url_len+2]
+                if _check_is_not_found(url):
+                    super().on_error(ctx, NetError("Client send not found"))
+                    return 
+                url = str(url, 'utf-8')
+                matcher = super().get_url_matcher(url)
+                if matcher is None:
+                    super().on_error(ctx, NetError("Can not found matcher for url {}".format(url)))
+                    self.__send_not_found(ctx)
+                else:
+                    res = matcher.on_message(json.loads(str(data[2+url_len:], 'utf-8')))
+                    res = {} if res is None else res
+                    res_bs = data[:2+url_len] + bytes(json.dumps(res), 'utf-8')
+                    ctx.to_prev_handler_on_write(len(res_bs).to_bytes(byteorder='big', length=4, signed=False)+res_bs)
         except Exception as e:
             super().on_error(ctx, e)
         

@@ -28,7 +28,7 @@ sslctx.en_crt = en_crt
 sslctx.en_key = en_key
 
 
-server = ARPCServer(sslctx = sslctx)
+server = ARPCServer()
 server.add_url_matcher("/你好", ServerURlA())
 server.listen_async("127.0.0.1", 9067)
 
@@ -51,9 +51,11 @@ sslctx1.key = cli_key
 sslctx1.en_crt = cli_en_crt
 sslctx1.en_key = cli_en_key
 
-cli = ARPCClient("127.0.0.1", 9067, sslctx = sslctx1)
+cli = ARPCClient("127.0.0.1", 9067)
 res0 = cli.call("/你好", {'a':'你好url'})
-print("收到服务端消息 {}".format(res0))
+res1 = cli.call("/你好", {'b':'你好b'})
+print("收到服务端消息1 {}".format(res0))
+print("收到服务端消息2 {}".format(res1))
 time.sleep(10)
 
 # cli.close()

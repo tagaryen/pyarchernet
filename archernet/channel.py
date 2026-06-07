@@ -258,7 +258,9 @@ class Channel():
         c_fd = ctypes.c_int64(self.__fd)
         buf = ctypes.create_string_buffer(4)
 
-        ARCHERLIB.ARCHER_channel_read(c_fd, buf, 4)
+        reads = ARCHERLIB.ARCHER_channel_read(c_fd, buf, 4)
+        if reads == 0:
+            return -1
         b4 = buf.raw
         return int.from_bytes(b4, byteorder='big', signed=False)
     
@@ -266,7 +268,9 @@ class Channel():
         c_fd = ctypes.c_int64(self.__fd)
         buf = ctypes.create_string_buffer(8)
 
-        ARCHERLIB.ARCHER_channel_read(c_fd, buf, 8)
+        reads = ARCHERLIB.ARCHER_channel_read(c_fd, buf, 8)
+        if reads == 0:
+            return -1
         b8 = buf.raw
         return int.from_bytes(b8, byteorder='big', signed=False)
 

@@ -607,31 +607,38 @@ class BlockedHttpHandler(Handler):
         super().__init__()
 
     def on_read(self, ctx: ChannelContext):
-        data = ctx.read()
-        req = self.__get_http_request(ctx)
-        res = self.__get_http_response(ctx)
-        if not req.headparsed:
-            req._HttpRequest__parse_head(data)
-        else:
-            req._HttpRequest__parse_content(data)
+        while True:
+            data = ctx.read()
+            if len(data) == 0:
+                return 
+            req = self.__get_http_request(ctx)
+            res = self.__get_http_response(ctx)
+            if not req.headparsed:
+                req._HttpRequest__parse_head(data)
+            else:
+                req._HttpRequest__parse_content(data)
 
-        if not req.ok:
-            res.set_status(HttpStatusCode.BAD_REQUEST)
-            self.on_http_error(ValueError(req._HttpRequest__err))
-        else:
-            res._HttpResponse__version = req._HttpRequest__version
-            if req.finished:
-                self.on_http_message(req, res)
-                if req.version == 'HTTP/1.0':
-                    ctx.close()
-                self.__reset(req, res)
+            if not req.ok:
+                self.__send_error(res, HttpStatusCode.BAD_REQUEST)
+                self.on_http_error(ValueError(req._HttpRequest__err))
+                return 
+            else:
+                res._HttpResponse__version = req._HttpRequest__version
+                if req.finished:
+                    try:
+                        self.on_http_message(req, res)
+                    except Exception as e:
+                        self.on_http_error(e)
+                    if req.version == 'HTTP/1.0':
+                        ctx.close()
+                    self.__reset(req, res)
+                    return 
         
         
     def on_error(self, ctx: ChannelContext, e: Exception):
         with self.__map_lock:
             self.__http_map.delete(ctx.channel.get_id())
         self.on_http_error(e)
-    
     
     def on_close(self, ctx: ChannelContext):
         self.__reset_http_request(ctx)
@@ -644,6 +651,10 @@ class BlockedHttpHandler(Handler):
     @abstractmethod
     def on_http_error(self, e: Exception):
         pass
+
+    def __send_error(self, res:HttpResponse, status: HttpStatusCode):
+        res.set_status(status)
+        res.send_content("<html><head><title>ARCHER-SERVER</title></head><body><h3>{}</h3></body></html>".format(_status_to_statusmessage(status)))
 
     def __reset(self, req: HttpRequest, res: HttpResponse):
         res._HttpResponse__reset()
@@ -906,25 +917,30 @@ class _HttpClientHandler(Handler):
 
     def on_read(self, ctx: ChannelContext):
         try:
-            data = ctx.read()
-            if not self.res.headparsed:
-                self.res._HttpClientResponse__parse_head(data)
-                if self.stream:
-                    if self.onresponse:
-                        self.onresponse(self.res)
-                    if self.onchunk and len(self.res.content) > 0:
-                        self.onchunk(self.res.content)
-                    self.res._HttpClientResponse__content = b''
-            else:
-                self.res._HttpClientResponse__parse_content(data)
-                if self.stream:
-                    if self.onchunk and len(self.res.content) > 0:
-                        self.onchunk(self.res.content)
-                    self.res._HttpClientResponse__content = b''
-            if not self.res.ok:
-                self.on_finish(ctx)
-            if self.res.finished:
-                self.on_finish(ctx)
+            while True:
+                data = ctx.read()
+                if len(data) == 0:
+                    return 
+                if not self.res.headparsed:
+                    self.res._HttpClientResponse__parse_head(data)
+                    if self.stream:
+                        if self.onresponse:
+                            self.onresponse(self.res)
+                        if self.onchunk and len(self.res.content) > 0:
+                            self.onchunk(self.res.content)
+                        self.res._HttpClientResponse__content = b''
+                else:
+                    self.res._HttpClientResponse__parse_content(data)
+                    if self.stream:
+                        if self.onchunk and len(self.res.content) > 0:
+                            self.onchunk(self.res.content)
+                        self.res._HttpClientResponse__content = b''
+                if not self.res.ok:
+                    self.on_finish(ctx)
+                    return 
+                if self.res.finished:
+                    self.on_finish(ctx)
+                    return 
         except Exception as e:
             if self.res._HttpClientResponse__ex is None:
                 self.res._HttpClientResponse__ex = e

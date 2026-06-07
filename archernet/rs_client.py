@@ -11,6 +11,7 @@ class _ResWaiting() :
     type: int
     key: bytes
     value: bytes
+    ex: Exception
 
     def __init__(self, type: int):
         self.condition = threading.Condition()
@@ -143,6 +144,7 @@ class _RSConnector(Handler):
     def on_error(self, ctx: ChannelContext, e: Exception):
         with self.condition:
             self.condition.notify_all() 
+        format_exception(e)
 
     def on_close(self, ctx: ChannelContext):
         self.connecting = False

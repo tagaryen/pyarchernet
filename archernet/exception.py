@@ -20,14 +20,13 @@ def format_exception(exc: Exception):
             chained_msg = _context_message
             chained_exc = exc.__context__
         else:
-            chained_msg = None
+            chained_msg = exc
             chained_exc = None
 
         output.append((chained_msg, exc))
         exc = chained_exc
 
     for msg, exc in output:
-        print(exc, file=sys.stderr)
         if msg is not None:
             print(msg, file=sys.stderr, end="")
         if hasattr(exc, 'stack'):
