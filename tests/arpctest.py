@@ -30,7 +30,7 @@ sslctx.en_key = en_key
 
 server = ARPCServer()
 server.add_url_matcher("/你好", ServerURlA())
-server.listen_async("127.0.0.1", 9067)
+server.listen("127.0.0.1", 9067)
 
 time.sleep(1)
 

@@ -36,4 +36,4 @@ class MyHttp(BlockedHttpHandler):
 
 
 server = HttpServer(2)
-server.listen_async("127.0.0.1", 9666, MyHttp())
+server.listen("127.0.0.1", 9666, MyHttp())

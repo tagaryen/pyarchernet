@@ -113,13 +113,7 @@ class ARPCServer():
         self.__sslctx = sslctx
         self.__handler =  _ARPCServerHandler()
 
-    def listen_async(self, host: str, port: int):
-        self.__do_listen(host, port, handler=self.__handler, is_async=True)
-
     def listen(self, host: str, port: int):
-        self.__do_listen(host, port, handler=self.__handler, is_async=False)
-    
-    def __do_listen(self, host: str, port: int, handler: _ARPCServerHandler, is_async: bool):
         if not isinstance(host, str):
             raise ValueError("host must be a int")
         if not isinstance(port, int):
@@ -127,10 +121,7 @@ class ARPCServer():
         handlerList = HandlerList()
         handlerList.add_handler(self.__handler)
         self.__server = ServerChannel(host, port, self.__threads, self.__sslctx, handlerlist=handlerList)
-        if is_async:
-            self.__server.listen_async()
-        else:
-            self.__server.listen()
+        self.__server.listen()
 
     def close(self):
         self.__server.close()

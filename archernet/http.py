@@ -697,13 +697,7 @@ class HttpServer():
         self.__threads = threads
         self.__sslctx = sslctx
 
-    def listen_async(self, host: str, port: int, handler: BlockedHttpHandler):
-        self.__do_listen(host, port, handler=handler, is_async=True)
-
     def listen(self, host: str, port: int, handler: BlockedHttpHandler):
-        self.__do_listen(host, port, handler=handler, is_async=False)
-    
-    def __do_listen(self, host: str, port: int, handler: BlockedHttpHandler, is_async: bool):
         if host is None or not isinstance(host, str):
             raise ValueError("host must be str")
         if port is not None and not isinstance(port, int):
@@ -713,10 +707,7 @@ class HttpServer():
         handlerList = HandlerList()
         handlerList.add_handler(handler)
         self.__server = ServerChannel(host, port, self.__threads, self.__sslctx, handlerlist=handlerList)
-        if is_async:
-            self.__server.listen_async()
-        else:
-            self.__server.listen()
+        self.__server.listen()
 
     def close(self):
         if self.__server is not None:

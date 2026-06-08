@@ -99,12 +99,7 @@ class Channel():
             raise NetError("initialize failed")
         self.__fd = fd
 
-    def connect_async(self):
-        self.__is_async = True
-        self.__do_connect()
-
     def connect(self):
-        self.__is_async = False
         self.__do_connect()
 
     def __do_connect(self):
@@ -212,17 +207,18 @@ class Channel():
         on_close = OnCloseCb(client_on_close)
 
         def block_connect():
-            ret = ARCHERLIB.ARCHER_channel_connect(c_fd, c_host, c_port, c_verify_peer, 
-                                                   c_ca, c_crt, c_key, c_en_crt, c_en_key, 
-                                                   c_matched_host, c_named_curves, c_max_ver, c_min_ver,
-                                                   on_connect, on_read, on_error, on_close)
-            if ret is not None and len(ret) > 0:
-                raise NetError(ret)
-        if self.__is_async:
-            self.__thread = threading.Thread(target=block_connect)
-            self.__thread.start()
-        else:
-            block_connect()
+            try:
+                ret = ARCHERLIB.ARCHER_channel_connect(c_fd, c_host, c_port, c_verify_peer, 
+                                                    c_ca, c_crt, c_key, c_en_crt, c_en_key, 
+                                                    c_matched_host, c_named_curves, c_max_ver, c_min_ver,
+                                                    on_connect, on_read, on_error, on_close)
+                if ret is not None and len(ret) > 0:
+                    raise NetError(ret)
+            except KeyboardInterrupt:
+                self.close()
+        
+        self.__thread = threading.Thread(target=block_connect)
+        self.__thread.start()
     
     def get_id(self) -> int:
         if self.__fd == 0:

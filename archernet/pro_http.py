@@ -3,7 +3,7 @@ from . import ARCHERLIB
 from .sslcontext import SSLContext
 from .handlers import NetError
 
-import ctypes
+import ctypes, threading
 from typing import Dict
 from abc import abstractmethod
 
@@ -246,12 +246,16 @@ class ProHttpServer():
         OnMessageCb = ctypes.CFUNCTYPE(None, ctypes.c_int64, ctypes.c_int64, ctypes.c_char_p, ctypes.c_char_p)
         onMsg = OnMessageCb(handle_message)
 
-        try:
-            errors = ARCHERLIB.ARCHER_http_server_listen(c_fd, c_host, c_port, c_thread, c_ssl, onMsg)
-            if errors is not None and len(errors) > 0:
-                raise NetError(str(errors, 'utf-8'))
-        except OSError:
-            pass
+        def block_listen():
+            try:
+                errors = ARCHERLIB.ARCHER_http_server_listen(c_fd, c_host, c_port, c_thread, c_ssl, onMsg)
+                if errors is not None and len(errors) > 0:
+                    raise NetError(str(errors, 'utf-8'))
+            except KeyboardInterrupt:
+                self.close()
+        
+        self.__thread = threading.Thread(target=block_listen)
+        self.__thread.start()
     
     def close(self):
         c_fd = ctypes.c_int64(self.__fd)

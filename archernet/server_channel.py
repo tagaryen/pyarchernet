@@ -86,11 +86,6 @@ class ServerChannel:
         self.__handler_list = handlerlist
 
     def listen(self):
-        self.__is_async = False
-        self.__start_listen()
-
-    def listen_async(self):
-        self.__is_async = True
         self.__start_listen()
 
 
@@ -197,17 +192,11 @@ class ServerChannel:
                 ret = ARCHERLIB.ARCHER_server_channel_listen(c_fd, c_host, c_port, c_ssl, c_thread, c_ca, c_crt, c_key, c_en_crt, c_en_key, c_max_ver, c_min_ver, on_connect, on_read, on_error, on_close)
                 if ret is not None and len(ret) > 0:
                     raise NetError(str(ret, 'utf-8'))
-            except OSError:
-                pass
+            except KeyboardInterrupt:
+                self.close()
 
-        if self.__is_async:
-            try:
-                self.__thread = threading.Thread(target=block_listen)
-                self.__thread.start()
-            except Exception:
-                pass
-        else:
-            block_listen()
+        self.__thread = threading.Thread(target=block_listen)
+        self.__thread.start()
 
     def close(self):
         c_fd = ctypes.c_int64(self.__fd)
