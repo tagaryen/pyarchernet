@@ -9,6 +9,8 @@ from .exception import format_exception
 
 NOTFOUND = b'\0\0\0\0NOTFOUND'
 NOTFOUND_LEN = len(NOTFOUND)
+PARAMERR = b'\0\0\0\0PARAMERR'
+PARAMERR_LEN = len(PARAMERR)
 
 def _check_is_not_found(input: bytes):
     if input is None or len(input) != NOTFOUND_LEN:
@@ -72,6 +74,11 @@ class _ARPCServerHandler(_ARPCHandler):
         data = nonce + NOTFOUND_LEN.to_bytes(2, byteorder="big", signed=False) + NOTFOUND
         res = len(data).to_bytes(byteorder='big', length=4, signed=False) + data
         ctx.to_prev_handler_on_write(res)
+    
+    def __send_param_err(self, ctx: ChannelContext, nonce: bytes):
+        data = nonce + PARAMERR_LEN.to_bytes(2, byteorder="big", signed=False) + PARAMERR
+        res = len(data).to_bytes(byteorder='big', length=4, signed=False) + data
+        ctx.to_prev_handler_on_write(res)
 
     def on_read(self, ctx: ChannelContext):
         try: 
@@ -91,10 +98,13 @@ class _ARPCServerHandler(_ARPCHandler):
                     super().on_error(ctx, NetError("Can not found matcher for url {}".format(str(url, 'utf-8'))))
                     self.__send_not_found(ctx, nonce)
                 else:
-                    res = matcher.on_message(json.loads(str(data[off:], 'utf-8')))
-                    res = {} if res is None else res
-                    res_bs = data[:off] + bytes(json.dumps(res), 'utf-8')
-                    ctx.to_prev_handler_on_write(len(res_bs).to_bytes(byteorder='big', length=4, signed=False)+res_bs)
+                    try:
+                        res = matcher.on_message(json.loads(str(data[off:], 'utf-8')))
+                        res = {} if res is None else res
+                        res_bs = data[:off] + bytes(json.dumps(res), 'utf-8')
+                        ctx.to_prev_handler_on_write(len(res_bs).to_bytes(byteorder='big', length=4, signed=False)+res_bs)
+                    except Exception:
+                        self.__send_param_err(ctx, nonce)
         except Exception as e:
             super().on_error(ctx, e)
         
