@@ -56,7 +56,6 @@ class _RSConnector(Handler):
     callback_map = {}
 
     def __init__(self, host:str, port: int, key: str):
-        self.connecting = False
         self.host = host
         self.port = port
         
@@ -69,9 +68,8 @@ class _RSConnector(Handler):
         self.condition = threading.Condition()
 
     def do_connect(self):
-        if not self.connecting and not self.channel.active:
-            self.connecting = True
-            self.channel.connect_async()
+        if not self.channel.active:
+            self.channel.connect()
 
             start = time.time()
             with self.condition:
@@ -86,8 +84,7 @@ class _RSConnector(Handler):
         self.send(self._CLIENT_SAVE_TYPE, key, value)
 
     def send(self, type: int, key: bytes, value: bytes) -> bytes:
-        if not self.connecting and not self.channel.active:
-            self.do_connect()
+        self.do_connect()
         data = b'9607'
         nonce = os.urandom(16)
         cipher = sm4_encrypt_ecb(bytes(self.key, 'utf-8'), nonce)
@@ -106,37 +103,39 @@ class _RSConnector(Handler):
         return cb.value
 
     def on_connect(self, ctx: ChannelContext):
-        self.connecting = True
         self.ctx = ctx
         with self.condition:
             self.condition.notify_all() 
 
     def on_read(self, ctx: ChannelContext):
-        try:
-            total_len = ctx.read_int32()
-            data = ctx.read_len(total_len)
-            if b'9607' != data[0:4] :
-                raise NetError("Invalid input data")
-            nonce = data[4:20]
-            type = int.from_bytes(data[52:53], byteorder='big', signed=False)
-            cb = self.callback_map[nonce.hex()]
-            del self.callback_map[nonce.hex()]
-            off = 53
-            if type == self._SERVER_OK_TYPE:
-                if cb.type == self._CLIENT_SAVE_TYPE:
-                    cb.set_result(None, None)
+        while True:
+            try:
+                total_len = ctx.read_int32()
+                if total_len <= 0:
+                    return
+                data = ctx.read_len(total_len)
+                if b'9607' != data[0:4] :
+                    raise NetError("Invalid input data")
+                nonce = data[4:20]
+                type = int.from_bytes(data[52:53], byteorder='big', signed=False)
+                cb = self.callback_map[nonce.hex()]
+                del self.callback_map[nonce.hex()]
+                off = 53
+                if type == self._SERVER_OK_TYPE:
+                    if cb.type == self._CLIENT_SAVE_TYPE:
+                        cb.set_result(None, None)
+                    else:
+                        key_len = int.from_bytes(data[off: off+2], byteorder='big', signed=False)
+                        off += 2
+                        key = data[off: off+key_len]
+                        value = data[off+key_len:]
+                        cb.set_result(key, value)
+                elif type == self._SERVER_FAIL_TYPE:
+                    raise NetError("Server response failed")
                 else:
-                    key_len = int.from_bytes(data[off: off+2], byteorder='big', signed=False)
-                    off += 2
-                    key = data[off: off+key_len]
-                    value = data[off+key_len:]
-                    cb.set_result(key, value)
-            elif type == self._SERVER_FAIL_TYPE:
-                raise NetError("Server response failed")
-            else:
-                raise NetError("Invalid response message type")
-        except Exception as e:
-            self.on_error(ctx, e)
+                    raise NetError("Invalid response message type")
+            except Exception as e:
+                self.on_error(ctx, e)
     
     def on_write(self, ctx: ChannelContext, data: bytes):
         ctx.to_prev_handler_on_write(data)

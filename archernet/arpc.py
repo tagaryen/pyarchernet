@@ -136,35 +136,43 @@ class ARPCServer():
 class _ARPCClientHandler(_ARPCHandler):
 
     __cb_map: Dict
+    __ctx_cnd = threading.Condition()
+    __cb: Callable
 
-    def __init__(self, active_cb: Callable):
-        self.__cb = active_cb
+    def __init__(self, cb: Callable):
         self.__cb_map = {}
+        self.__ctx_cnd = threading.Condition()
+        self.__cb = cb
         super().__init__()
 
     def on_connect(self, ctx: ChannelContext):
-        self.__cb(ctx, True)
+        self.__cb(ctx)
+        with self.__ctx_cnd:
+            self.__ctx_cnd.notify_all()
 
     def on_read(self, ctx: ChannelContext):
-        try: 
-            total_len = ctx.read_int32()
-            data = ctx.read_len(total_len)
-            url_len = int.from_bytes(data[0:2], byteorder='big', signed=False)
-            url = data[2:url_len+2]
-            if _check_is_not_found(url):
-                super().on_error(ctx, NetError("Server send not found"))
-                return 
-            url = str(url, 'utf-8')
-            cb = self.get_url_cb(url)
-            if cb is None:
-                super().on_error(ctx, NetError("Can not found matcher for url {}".format(url)))
-            else:
-                cb(json.loads(str(data[2+url_len:], 'utf-8')))
-        except Exception as e:
-            super().on_error(ctx, e)
+        while True:
+            try: 
+                total_len = ctx.read_int32()
+                if total_len <= 0:
+                    return 
+                data = ctx.read_len(total_len)
+                url_len = int.from_bytes(data[0:2], byteorder='big', signed=False)
+                url = data[2:url_len+2]
+                if _check_is_not_found(url):
+                    super().on_error(ctx, NetError("Server send not found"))
+                url = str(url, 'utf-8')
+                cb = self.get_url_cb(url)
+                print(f"cb = {'None' if cb is None else 'Exists'}  url = {url}, data = {data[2+url_len:]}")
+                if cb is None:
+                    super().on_error(ctx, NetError("Can not found matcher for url {}".format(url)))
+                else:
+                    cb(json.loads(str(data[2+url_len:], 'utf-8')))
+            except Exception as e:
+                super().on_error(ctx, e)
 
     def on_close(self, ctx: ChannelContext):
-        self.__cb(ctx, False)
+        self.__cb(ctx)
 
     def get_url_cb(self, url: str) -> Callable:
         if url not in self.__cb_map:
@@ -173,18 +181,44 @@ class _ARPCClientHandler(_ARPCHandler):
 
     def add_url_cb(self, url: str, cb: Callable):
         self.__cb_map[url] = cb
+    
+    def wait_for_connect(self):
+        start = time.time()
+        with self.__ctx_cnd:
+            self.__ctx_cnd.wait(4)
+        if time.time() - start >= 4:
+            raise NetError("Connect timeout")
+
+class _ResWaiting() :
+    condition: threading.Condition
+    res: Dict
+
+    def __init__(self):
+        self.condition = threading.Condition()
+        self.res = None
+
+    def set_result(self, res: Dict):
+        self.res = res
+        with self.condition:
+            self.condition.notify()
+
+    def wait_for_result(self):
+        start = time.time()
+        with self.condition:
+            self.condition.wait(3)
+        if time.time() - start >= 3:
+            raise NetError("Waitting for response timeout")
+
 
 
 class ARPCClient():
     
-    __TIMEOUT = 2
+    __TIMEOUT = 3
 
     __host: str
     __port: int
-    __active: bool
-    __ctx: SSLContext
-    __ctx_lock: threading.Lock
-    __ctx_cnd: threading.Condition
+    __sslctx: SSLContext
+    __ctx: ChannelContext
 
     def __init__(self, host: str, port: int, sslctx: SSLContext = None):
         if not isinstance(host, str):
@@ -196,31 +230,18 @@ class ARPCClient():
         self.__host = host
         self.__port = port
         self.__sslctx = sslctx
-        self.__active = False
-        self.__ctx_lock = threading.Lock()
-        self.__ctx_cnd = threading.Condition(self.__ctx_lock)
 
-        def client_connected_cb(ctx: ChannelContext, active: bool):
-            self.__active = active
+        def connect_cb(ctx: ChannelContext):
             self.__ctx = ctx
-            with self.__ctx_lock:
-                self.__ctx_cnd.notify()
-
-        self.__handler = _ARPCClientHandler(client_connected_cb)
-    
-    def __do_connect(self):
-        if self.__active:
-            return
+        self.__handler = _ARPCClientHandler(connect_cb)
         handlerList = HandlerList()
         handlerList.add_handler(self.__handler)
         self.__channel = Channel(self.__host, self.__port, sslctx=self.__sslctx, handlerlist=handlerList)
-        self.__channel.connect_async()
-        
-        start = int(time.time())
-        with self.__ctx_lock:
-            self.__ctx_cnd.wait(ARPCClient.__TIMEOUT)
-        if start + ARPCClient.__TIMEOUT <= int(time.time()):
-            raise NetError("Connect timeout")
+    
+    def __do_connect(self):
+        if not self.__channel.active:
+            self.__channel.connect()
+            self.__handler.wait_for_connect()
     
     def call(self, url: str, data: Dict) -> Dict:
         if not isinstance(url, str):
@@ -228,22 +249,16 @@ class ARPCClient():
         if not isinstance(data, Dict):
             raise ValueError("data must be Dict")
         self.__do_connect()
-        msg = {'res': None}
-        msg_lock = threading.Lock()
-        msg_cnd = threading.Condition(msg_lock)
+        waiting = _ResWaiting()
         def msg_cb(res: Dict):
-            msg['res'] = res
-            with msg_lock:
-                msg_cnd.notify_all()
+            waiting.set_result(res)
         self.call_async(url, data, msg_cb)
-        start = int(time.time())
-        with msg_lock:
-            msg_cnd.wait(ARPCClient.__TIMEOUT)
-        if start + ARPCClient.__TIMEOUT <= int(time.time()):
-            raise NetError("Read timeout")
-        if msg['res'] == None:
+        if waiting.res is not None:
+            return waiting.res
+        waiting.wait_for_result()
+        if waiting.res == None:
             raise NetError("Can not get response")
-        return msg['res']
+        return waiting.res
     
     def call_async(self, url: str, data: Dict, msg_callback: Callable):
         if not isinstance(url, str):
@@ -254,9 +269,9 @@ class ARPCClient():
             raise ValueError("msg_callback must be Callable")
         self.__do_connect()
         self.__handler.add_url_cb(url, msg_callback)
-        res = b'{}' if data is None else json.dumps(data)
+        data_bs = b'{}' if data is None else json.dumps(data, ensure_ascii=False).encode('utf-8')
         url_bs = url.encode('utf-8')
-        res_bs = len(url_bs).to_bytes(2, byteorder="big", signed=False) + url_bs + bytes(res, 'utf-8')
+        res_bs = len(url_bs).to_bytes(2, byteorder="big", signed=False) + url_bs + data_bs
         self.__ctx.to_prev_handler_on_write(len(res_bs).to_bytes(4, byteorder="big", signed=False) + res_bs)
 
     def close(self):

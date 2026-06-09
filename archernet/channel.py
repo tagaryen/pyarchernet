@@ -23,6 +23,7 @@ class Channel():
     __handler_list: HandlerList
 
     __active: bool
+    __connecting: bool
 
     def __init__(self, host="127.0.0.1", port=9617, client_mode=True, sslctx: SSLContext = None, handlerlist:HandlerList = None):
         self.__check(host, port)
@@ -37,6 +38,8 @@ class Channel():
         self.__fd = 0
         self.__client_mode = client_mode
         self.__active = False
+        self.__connecting = False
+        self.__lock = threading.Lock()
         if sslctx is not None and not sslctx.is_client_mode:
             raise NetError("can not use a server-side SSLContext at client side")
         self.__sslctx = sslctx
@@ -107,6 +110,12 @@ class Channel():
         '''        
         if not self.__client_mode:
             raise NetError("server side channel can not connect to remote")
+        
+        with self.__lock:
+            if not self.__connecting:
+                self.__connecting = True
+            else:
+                return
 
         self.__fd = ARCHERLIB.ARCHER_channel_new_fd()
 
@@ -286,6 +295,8 @@ class Channel():
         cnt = 0
         while True:
             readn = ARCHERLIB.ARCHER_channel_read(c_fd, buf, len - cnt)
+            if readn == 0:
+                break
             content += buf.raw[0:readn]
             cnt += readn
             if cnt >= len:
