@@ -1,4 +1,4 @@
-import json, threading, time
+import json, threading, time, os
 from typing import Callable, Dict
 from abc import abstractmethod
 from .handlers import Handler, ChannelContext, NetError, HandlerList
@@ -68,9 +68,10 @@ class _ARPCServerHandler(_ARPCHandler):
     def __init__(self):
         super().__init__()
     
-    def __send_not_found(self, ctx: ChannelContext):
-        data = NOTFOUND_LEN.to_bytes(2, byteorder="big", signed=False) + NOTFOUND
-        ctx.to_prev_handler_on_write(data)
+    def __send_not_found(self, ctx: ChannelContext, nonce: bytes):
+        data = nonce + NOTFOUND_LEN.to_bytes(2, byteorder="big", signed=False) + NOTFOUND
+        res = len(data).to_bytes(byteorder='big', length=4, signed=False) + data
+        ctx.to_prev_handler_on_write(res)
 
     def on_read(self, ctx: ChannelContext):
         try: 
@@ -79,20 +80,20 @@ class _ARPCServerHandler(_ARPCHandler):
                 if total_len < 0:
                     return
                 data = ctx.read_len(total_len)
-                url_len = int.from_bytes(data[0:2], byteorder='big', signed=False)
-                url = data[2:url_len+2]
-                if _check_is_not_found(url):
-                    super().on_error(ctx, NetError("Client send not found"))
-                    return 
-                url = str(url, 'utf-8')
-                matcher = super().get_url_matcher(url)
+                nonce = data[:16]
+                off = 16
+                url_len = int.from_bytes(data[off:off+2], byteorder='big', signed=False)
+                off += 2
+                url = data[off:off+url_len]
+                off += url_len
+                matcher = super().get_url_matcher(str(url, 'utf-8'))
                 if matcher is None:
-                    super().on_error(ctx, NetError("Can not found matcher for url {}".format(url)))
-                    self.__send_not_found(ctx)
+                    super().on_error(ctx, NetError("Can not found matcher for url {}".format(str(url, 'utf-8'))))
+                    self.__send_not_found(ctx, nonce)
                 else:
-                    res = matcher.on_message(json.loads(str(data[2+url_len:], 'utf-8')))
+                    res = matcher.on_message(json.loads(str(data[off:], 'utf-8')))
                     res = {} if res is None else res
-                    res_bs = data[:2+url_len] + bytes(json.dumps(res), 'utf-8')
+                    res_bs = data[:off] + bytes(json.dumps(res), 'utf-8')
                     ctx.to_prev_handler_on_write(len(res_bs).to_bytes(byteorder='big', length=4, signed=False)+res_bs)
         except Exception as e:
             super().on_error(ctx, e)
@@ -157,30 +158,35 @@ class _ARPCClientHandler(_ARPCHandler):
                 if total_len <= 0:
                     return 
                 data = ctx.read_len(total_len)
-                url_len = int.from_bytes(data[0:2], byteorder='big', signed=False)
-                url = data[2:url_len+2]
-                if _check_is_not_found(url):
-                    super().on_error(ctx, NetError("Server send not found"))
-                url = str(url, 'utf-8')
-                cb = self.get_url_cb(url)
-                print(f"cb = {'None' if cb is None else 'Exists'}  url = {url}, data = {data[2+url_len:]}")
+                nonce = data[:16]
+                off = 16
+                url_len = int.from_bytes(data[off:off+2], byteorder='big', signed=False)
+                off += 2
+                url = data[off:off+url_len]
+                off += url_len
+                cb = self.get_url_cb(nonce.hex())
                 if cb is None:
-                    super().on_error(ctx, NetError("Can not found matcher for url {}".format(url)))
+                    super().on_error(ctx, NetError("Invalid nonce"))
                 else:
-                    cb(json.loads(str(data[2+url_len:], 'utf-8')))
+                    if _check_is_not_found(url):
+                        cb(None, NetError("Server url not found"))
+                    else:
+                        cb(json.loads(str(data[off:], 'utf-8')), None)
             except Exception as e:
                 super().on_error(ctx, e)
 
     def on_close(self, ctx: ChannelContext):
         self.__cb(ctx)
 
-    def get_url_cb(self, url: str) -> Callable:
-        if url not in self.__cb_map:
+    def get_url_cb(self, nonce: str) -> Callable:
+        if nonce not in self.__cb_map:
             return None
-        return self.__cb_map[url]
+        cb = self.__cb_map[nonce]
+        del self.__cb_map[nonce]
+        return cb
 
-    def add_url_cb(self, url: str, cb: Callable):
-        self.__cb_map[url] = cb
+    def add_url_cb(self, nonce: str, cb: Callable):
+        self.__cb_map[nonce] = cb
     
     def wait_for_connect(self):
         start = time.time()
@@ -192,13 +198,15 @@ class _ARPCClientHandler(_ARPCHandler):
 class _ResWaiting() :
     condition: threading.Condition
     res: Dict
+    ex: Exception
 
     def __init__(self):
         self.condition = threading.Condition()
         self.res = None
 
-    def set_result(self, res: Dict):
+    def set_result(self, res: Dict, ex: Exception):
         self.res = res
+        self.ex = ex
         with self.condition:
             self.condition.notify()
 
@@ -250,29 +258,26 @@ class ARPCClient():
             raise ValueError("data must be Dict")
         self.__do_connect()
         waiting = _ResWaiting()
-        def msg_cb(res: Dict):
-            waiting.set_result(res)
-        self.call_async(url, data, msg_cb)
+        def msg_cb(res: Dict, ex: Exception):
+            waiting.set_result(res, ex)
+        
+        nonce = os.urandom(16)
+        url_bs = url.encode('utf-8')
+        data_bs = b'{}' if data is None else json.dumps(data, ensure_ascii=False).encode('utf-8')
+        
+        self.__handler.add_url_cb(nonce.hex(), msg_cb)
+
+        res_bs = nonce + len(url_bs).to_bytes(2, byteorder="big", signed=False) + url_bs + data_bs
+        self.__ctx.to_prev_handler_on_write(len(res_bs).to_bytes(4, byteorder="big", signed=False) + res_bs)
+
         if waiting.res is not None:
             return waiting.res
         waiting.wait_for_result()
-        if waiting.res == None:
+        if waiting.ex is not None:
+            raise waiting.ex
+        if waiting.res is None:
             raise NetError("Can not get response")
         return waiting.res
-    
-    def call_async(self, url: str, data: Dict, msg_callback: Callable):
-        if not isinstance(url, str):
-            raise ValueError("url must be a int")
-        if not isinstance(data, Dict):
-            raise ValueError("data must be Dict")
-        if msg_callback is not None and not isinstance(msg_callback, Callable):
-            raise ValueError("msg_callback must be Callable")
-        self.__do_connect()
-        self.__handler.add_url_cb(url, msg_callback)
-        data_bs = b'{}' if data is None else json.dumps(data, ensure_ascii=False).encode('utf-8')
-        url_bs = url.encode('utf-8')
-        res_bs = len(url_bs).to_bytes(2, byteorder="big", signed=False) + url_bs + data_bs
-        self.__ctx.to_prev_handler_on_write(len(res_bs).to_bytes(4, byteorder="big", signed=False) + res_bs)
 
     def close(self):
         self.__channel.close()

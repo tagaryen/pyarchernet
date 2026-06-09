@@ -28,10 +28,10 @@ def format_exception(exc: Exception):
 
     for msg, exc in output:
         if msg is not None:
-            print(msg, file=sys.stderr, end="")
+            print(msg, file=sys.stderr)
         if hasattr(exc, 'stack'):
-            print('Traceback:\n', file=sys.stderr, end="")
-            print(exc.stack.format(), file=sys.stderr, end="")
+            print('Traceback:\n', file=sys.stderr)
+            print(exc.stack.format(), file=sys.stderr)
         
         if hasattr(exc, 'format_exception_only'):
-            print(exc.format_exception_only(), file=sys.stderr, end="")
+            print(exc.format_exception_only(), file=sys.stderr)

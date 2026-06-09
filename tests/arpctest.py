@@ -3,11 +3,11 @@ import time, threading
 from typing import Dict
 
 
-# class ServerURlA(AbstractUrlMatcher):
+class ServerURlA(AbstractUrlMatcher):
 
-#     def on_message(self, msg: Dict) -> Dict:
-#         print("收到客户端消息 {}".format(msg))
-#         return {'c': "python send"}
+    def on_message(self, msg: Dict) -> Dict:
+        print("收到客户端消息 {}".format(msg))
+        return {'c': "python send"}
 
 # with open('tests/gm_cert/ca.crt', 'r', encoding='utf-8') as file:
 #     ca = file.read()
@@ -28,9 +28,9 @@ from typing import Dict
 # sslctx.en_key = en_key
 
 
-# server = ARPCServer()
-# server.add_url_matcher("/你好", ServerURlA())
-# server.listen("127.0.0.1", 9067)
+server = ARPCServer()
+server.add_url_matcher("/你好-某个人-1", ServerURlA())
+server.listen("127.0.0.1", 9612)
 
 # time.sleep(1)
 
@@ -51,18 +51,18 @@ from typing import Dict
 # sslctx1.en_crt = cli_en_crt
 # sslctx1.en_key = cli_en_key
 
-cli = ARPCClient("127.0.0.1", 9612)
+# cli = ARPCClient("127.0.0.1", 9612)
 
 
-t1 = threading.Thread(target=lambda : print("收到1 {}".format(cli.call("/你好-徐熠-1", {'b':'你好b'}))))
-t2 = threading.Thread(target=lambda : print("收到2 {}".format(cli.call("/你好-徐熠", {'a':'你好a'}))))
-t3 = threading.Thread(target=lambda : print("收到3 {}".format(cli.call("/你好-徐熠-1", {'b':'你好b-b'}))))
+# t1 = threading.Thread(target=lambda : print("收到1 {}".format(cli.call("/你好-某个人-1", {'b':'你好b'}))))
+# t2 = threading.Thread(target=lambda : print("收到2 {}".format(cli.call("/你好-某个人", {'a':'你好a'}))))
+# t3 = threading.Thread(target=lambda : print("收到3 {}".format(cli.call("/你好-某个人-1", {'b':'你好b-b'}))))
 
-t1.start()
-t2.start()
-t3.start()
+# t1.start()
+# t2.start()
+# t3.start()
 
-time.sleep(10)
+# time.sleep(10)
 
-cli.close()
-# server.close()
+# cli.close()
+server.close()
