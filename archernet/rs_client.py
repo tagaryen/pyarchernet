@@ -22,6 +22,11 @@ class _ResWaiting() :
         self.value = value
         with self.condition:
             self.condition.notify_all()
+    
+    def set_ex(self, ex: Exception):
+        self.ex = ex
+        with self.condition:
+            self.condition.notify_all()
 
     def wait_for_result(self):
         start = time.time()
@@ -100,6 +105,8 @@ class _RSConnector(Handler):
         self.callback_map[nonce.hex()] = cb
         self.on_write(self.ctx, len(data).to_bytes(length=4, byteorder='big') + data)
         cb.wait_for_result()
+        if cb.ex is not None:
+            raise cb.ex
         return cb.value
 
     def on_connect(self, ctx: ChannelContext):
@@ -131,9 +138,9 @@ class _RSConnector(Handler):
                         value = data[off+key_len:]
                         cb.set_result(key, value)
                 elif type == self._SERVER_FAIL_TYPE:
-                    raise NetError("Server response failed")
+                    cb.set_ex(NetError("Server response failed"))
                 else:
-                    raise NetError("Invalid response message type")
+                    cb.set_ex(NetError("Invalid response message type"))
             except Exception as e:
                 self.on_error(ctx, e)
     
