@@ -3,7 +3,7 @@ network framework based on c library, support latest openssl(gmssl) 1.3
 support encrypted key and encrypted certificate  
 ## install:   
 ``` cmd
-  pip install archernet==1.5.5
+  pip install archernet==1.5.6
 ``` 
 ## http(s) examples:  
 client:  

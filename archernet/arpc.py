@@ -20,6 +20,14 @@ def _check_is_not_found(input: bytes):
             return False
     return True
 
+def _check_is_param_err(input: bytes):
+    if input is None or len(input) != PARAMERR_LEN:
+        return False
+    for i in range(0, PARAMERR_LEN):
+        if PARAMERR[i] != input[i]:
+            return False
+    return True
+
 class AbstractUrlMatcher():
 
     @abstractmethod
@@ -180,6 +188,8 @@ class _ARPCClientHandler(_ARPCHandler):
                 else:
                     if _check_is_not_found(url):
                         cb(None, NetError("Server url not found"))
+                    elif _check_is_param_err(url):
+                        cb(None, NetError("Server param error"))
                     else:
                         cb(json.loads(str(data[off:], 'utf-8')), None)
             except Exception as e:
