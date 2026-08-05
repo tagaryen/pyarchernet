@@ -9,7 +9,7 @@ import threading, os, mimetypes, sys
 from typing import Callable, List, Generator, Union, Dict
 from abc import abstractmethod
 from datetime import datetime
-import random
+import random, json
 
 _LRN = "\r\n"
 
@@ -454,12 +454,13 @@ class HttpRequest():
         elif "transfer-encoding" in self.__headers and 'chunked' == self.__headers["transfer-encoding"]:
             self.__chunked = True
         else:
-            self.__content_length = 0
+            self.__content = text
+            self.__content_length = len(self.__content)
             self.__chunked = False
 
         if not self.__chunked and self.__content_length == 0:
             self.__finished = True
-        elif self.__content_length > 0 and len(self.__content) > self.__content_length:
+        elif self.__content_length > 0 and len(self.__content) >= self.__content_length:
             self.__finished = True
 
         if not self.__finished:
@@ -825,12 +826,13 @@ class HttpClientResponse():
         elif "transfer-encoding" in self.__headers and 'chunked' == self.__headers["transfer-encoding"]:
             self.__chunked = True
         else:
-            self.__content_length = 0
+            self.__content = b'\r\n'.join(lines[l:])
+            self.__content_length = len(self.__content)
             self.__chunked = False
 
         if not self.__chunked and self.__content_length == 0:
             self.__finished = True
-        elif self.__content_length > 0 and len(self.__content) > self.__content_length:
+        elif self.__content_length > 0 and len(self.__content) >= self.__content_length:
             self.__finished = True
         
         if not self.__finished:
@@ -1012,6 +1014,12 @@ class HttpReq():
         encoding =  newheaders["content-encoding"]
         content = bytes(content, encoding)
         if body is not None:
+            if isinstance(body, bytes):
+                pass
+            elif isinstance(body, str):
+                body = bytes(body, encoding)
+            else:
+                body = bytes(json.dumps(body), encoding)
             content += body
         handlerlist = HandlerList()
         res = HttpClientResponse()
@@ -1070,7 +1078,7 @@ class HttpClient():
             req = HttpReq(method, url, headers, body, ssl_ctx)
         
         ch = Channel(req.host, req.port, sslctx = req.ctx, handlerlist=req.handlerlist)
-        ch.connect()
+        ch._Channel__do_connect(sync=True)
 
         res = req.handler.res
         if res._HttpClientResponse__ex is not None or not res.ok:
@@ -1092,7 +1100,7 @@ class HttpClient():
         
         req.handler.set_stream(onresponse, onchunk)
         ch = Channel(req.host, req.port, sslctx = req.ctx, handlerlist=req.handlerlist)
-        ch.connect()
+        ch._Channel__do_connect(sync=True)
 
         res = req.handler.res
         if res._HttpClientResponse__ex is not None or not res.ok:

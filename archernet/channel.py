@@ -105,7 +105,7 @@ class Channel():
     def connect(self):
         self.__do_connect()
 
-    def __do_connect(self):
+    def __do_connect(self, sync=False):
         '''connect to remote server
         '''        
         if not self.__client_mode:
@@ -225,9 +225,11 @@ class Channel():
                     raise NetError(ret)
             except KeyboardInterrupt:
                 self.close()
-        
-        self.__thread = threading.Thread(target=block_connect)
-        self.__thread.start()
+        if sync:
+            block_connect()
+        else:
+            self.__thread = threading.Thread(target=block_connect)
+            self.__thread.start()
     
     def get_id(self) -> int:
         if self.__fd == 0:
