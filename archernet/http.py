@@ -187,6 +187,9 @@ class FormData():
         if not os.path.exists(filepath):
             raise FileExistsError("file {} not found".format(filepath))
         c_type, _ = mimetypes.guess_type(filepath)
+        if c_type is None:
+            suffix = os.path.basename(filepath).split('.')[-1]
+            c_type = 'application/' + (suffix if suffix else 'none')
         self.multiparts.append(Multipart(key, filepath, True, os.path.basename(filepath), c_type))
     
     def calculate_multipart_length(self):
