@@ -16,7 +16,7 @@ URL = 'https://github.com/tagaryen/pyarchernet'
 EMAIL = '2564928358@qq.com'
 AUTHOR = 'Archer'
 REQUIRES_PYTHON = '>=3.6.8'
-VERSION = '1.5.10'
+VERSION = '1.5.11'
 
 # What packages are required for this module to be executed?
 REQUIRED = []
@@ -87,7 +87,7 @@ setup(
     packages=find_packages(exclude=["tests", "*.tests", "*.tests.*", "tests.*"]),
     install_requires=REQUIRED,
     package_data={
-        'archernet': ['lib/libarchernet.dll', 'lib/libarchernet.so']
+        'archernet': ['lib/libarchernet.dll', 'lib/libarchernet-x86-64.so', 'lib/libarchernet-aarch64.so']
     },
     extras_require=EXTRAS,
     include_package_data=True,
